@@ -1,7 +1,7 @@
 import pandas as pd
 import sqlite3
 
-df = pd.read_csv('data/dados_vendas_tratados.csv', sep=';')
+df = pd.read_csv('data/dados_locacao_tratado.csv', sep=';')
 
 print(df.head())      
 print(df.columns)      
