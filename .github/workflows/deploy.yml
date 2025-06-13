@@ -1,0 +1,31 @@
+name: Deploy Streamlit
+
+on:
+  push:
+    branches:
+      - main
+      - branch-luana
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Ì≥• Clonar reposit√≥rio
+        uses: actions/checkout@v3
+
+      - name: Ì∞ç Configurar Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Ì≥¶ Instalar depend√™ncias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: ‚úÖ Testar execu√ß√£o do Streamlit
+        run: |
+          streamlit run app.py --server.headless true &
+          sleep 15
+          echo "‚úÖ App rodando (teste de execu√ß√£o conclu√≠do)"

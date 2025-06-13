@@ -1,6 +1,6 @@
-pandas
+streamlit
 plotly
-dash
+pandas
 jupyter
-requests
-ipykernel
+pytest
+selenium

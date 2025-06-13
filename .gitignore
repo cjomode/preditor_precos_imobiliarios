@@ -1,1 +1,24 @@
-.venv/
+# Chaves e arquivos sensíveis
+infra/minha-chave.pub
+
+# Diretórios e arquivos do Terraform
+*.tfstate
+*.tfstate.backup
+.terraform/
+terraform.tfstate
+terraform.tfstate.backup
+
+# Ambiente virtual do Python
+venv/
+.env
+__pycache__/
+
+# IDEs
+.vscode/
+*.code-workspace
+
+# Arquivos de log
+*.log
+
+# Pycache
+*.pyc
