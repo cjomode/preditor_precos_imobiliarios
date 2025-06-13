@@ -14,6 +14,8 @@ if 'mostrar_codigo' not in st.session_state:
     st.session_state.mostrar_codigo = False
 if 'usuario_autenticado' not in st.session_state:
     st.session_state.usuario_autenticado = False
+if "verificacao_mfa_sucesso" not in st.session_state:
+    st.session_state.verificacao_mfa_sucesso = False
 
 def gerar_codigo_mfa():
     return str(random.randint(100000, 999999))
@@ -35,39 +37,51 @@ if st.session_state.login_etapa == 'login':
             if usuario == "admin" and senha == "admin":
                 st.session_state.codigo_mfa = gerar_codigo_mfa()
                 st.session_state.login_etapa = 'mfa'
+                st.rerun()
             else:
                 st.error("❌ Usuário ou senha inválidos.")
     st.stop()
 
 elif st.session_state.login_etapa == 'mfa':
     st.subheader("🔑 Verificação em Duas Etapas (MFA)")
+
     if not st.session_state.mostrar_codigo:
         if st.button("📩 Receber Código MFA"):
             st.session_state.mostrar_codigo = True
+            st.rerun()
     else:
         st.markdown(f"### ✉️ Seu código é: `{st.session_state.codigo_mfa}`")
 
-    with st.form("mfa_form"):
-        codigo_input = st.text_input("Digite o código recebido")
-        col1, col2 = st.columns(2)
-        with col1:
-            verificar = st.form_submit_button("✅ Verificar Código")
-        with col2:
-            voltar = st.form_submit_button("🔄 Voltar")
+with st.form("mfa_form"):
+    codigo_input = st.text_input("Digite o código recebido")
 
-        if verificar:
-            if codigo_input == st.session_state.codigo_mfa:
-                st.success("Código verificado com sucesso!")
-                st.session_state.usuario_autenticado = True
-                st.session_state.login_etapa = 'autenticado'
-            else:
-                st.error("Código incorreto. Tente novamente.")
+    col1, col2 = st.columns(2)
+    with col1:
+        verificar = st.form_submit_button("✅ Verificar Código")
+    with col2:
+        voltar = st.form_submit_button("🔄 Voltar")
 
-        if voltar:
-            st.session_state.login_etapa = 'login'
-            st.session_state.codigo_mfa = ''
-            st.session_state.mostrar_codigo = False
-    st.stop()
+
+    if verificar:
+        if not codigo_input.strip():
+            st.warning("⚠️ O campo de código está vazio. Por favor, digite o código recebido.")
+        else:
+            st.session_state.verificacao_mfa_sucesso = (codigo_input == st.session_state.codigo_mfa)
+
+    if st.session_state.get("verificacao_mfa_sucesso", False):
+        st.session_state.usuario_autenticado = True
+        st.session_state.login_etapa = 'autenticado'
+        st.session_state.verificacao_mfa_sucesso = False
+        st.rerun()
+
+    if voltar:
+        st.session_state.login_etapa = 'login'
+        st.session_state.codigo_mfa = ''
+        st.session_state.mostrar_codigo = False
+        st.rerun()
+
+st.stop()
+
 
 if not st.session_state.usuario_autenticado:
     st.warning("⚠️ Acesso restrito. Faça login para visualizar o dashboard.")
