@@ -19,16 +19,14 @@
 
 ## 📖 Descrição do Projeto
 Bem-vindo ao Preditor de Preços Imobiliários Regionais! Este projeto inovador utiliza Big Data para prever a valorização ou desvalorização imobiliária na região Nordeste do Brasil. 
-### 🎯 Desenvolvido como parte de uma disciplina de Big Data, o objetivo é auxiliar corretores, consultores imobiliários e gestores urbanos a antecipar tendências de mercado, permitindo decisões mais informadas e estratégicas. Com uma interface web interativa e dados abrangentes de diversas capitais nordestinas, nossa aplicação oferece insights valiosos sobre o comportamento do mercado imobiliário regional.
+#### 🎯 Desenvolvido como parte de uma disciplina de Big Data, o objetivo é auxiliar corretores, consultores imobiliários e gestores urbanos a antecipar tendências de mercado, permitindo decisões mais informadas e estratégicas. Com uma interface web interativa e dados abrangentes de diversas capitais nordestinas, nossa aplicação oferece insights valiosos sobre o comportamento do mercado imobiliário regional.
 
 ## ✨ Destaques do Projeto
    🔒 Autenticação MFA: Aplicação construída em Streamlit com autenticação de múltiplos fatores (MFA). Somente usuários autorizados conseguem acessar o dashboard, garantindo segurança extra ao sistema.
    
    📊 Visualização Interativa: Integração com Plotly para gráficos dinâmicos e interativos. Explore os dados de imóveis (vendas, aluguel, etc.) através de visuais ricos, filtrando por cidade e período para identificar padrões de valorização/desvalorização.
    
-   🤖 Modelo Preditivo Inteligente: Modelo de machine learning treinado em um amplo conjunto de dados regionais (incluindo informações de diversas capitais do NE e indicadores econômicos). Ele estima a probabilidade de um imóvel valorizar ou desvalorizar, fornecendo recomendações de forma simples e intuitiva.
-   
-  🛠️ Infraestrutura como Código: Uso de Terraform para definir toda a infraestrutura em nuvem. A configuração abrange a criação de uma instância AWS EC2, grupos de segurança, chaves de acesso e scripts de inicialização (user data) que executam o Streamlit automaticamente. Isso torna o deploy reproduzível e escalável com apenas um comando!
+ 🛠️ Infraestrutura como Código: Uso de Terraform para definir toda a infraestrutura em nuvem. A configuração abrange a criação de uma instância AWS EC2, grupos de segurança, chaves de acesso e scripts de inicialização (user data) que executam o Streamlit automaticamente. Isso torna o deploy reproduzível e escalável com apenas um comando!
   
   🚀 CI/CD Automatizado: Pipeline de GitHub Actions incluído (deploy.yml) para futuramente automatizar o processo de deploy. Assim, sempre que houver atualizações, será possível implementar rapidamente a aplicação em produção de forma contínua e confiável.
 
@@ -68,8 +66,6 @@ Streamlit (framework web para criar a interface do dashboard de forma rápida e 
 Plotly (visualização de dados interativa em gráficos, embutida no Streamlit),
 
 Pandas (manipulação e análise de dados tabulares),
-
-Scikit-Learn (ou bibliotecas equivalentes de ML, para treinar o modelo preditivo),
 
 PyTest e Selenium (utilizados para testes automatizados da aplicação e da interface).
 
