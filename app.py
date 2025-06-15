@@ -18,6 +18,7 @@ if 'usuario_autenticado' not in st.session_state:
 def gerar_codigo_mfa():
     return str(random.randint(100000, 999999))
 
+# ------------- ETAPA LOGIN ------------------
 if st.session_state.login_etapa == 'login':
     st.set_page_config(page_title="Login - Preditor Imobiliário", layout="centered")
     st.markdown("""
@@ -35,46 +36,52 @@ if st.session_state.login_etapa == 'login':
             if usuario == "admin" and senha == "admin":
                 st.session_state.codigo_mfa = gerar_codigo_mfa()
                 st.session_state.login_etapa = 'mfa'
+                st.rerun()
             else:
                 st.error("❌ Usuário ou senha inválidos.")
     st.stop()
 
+# ------------- ETAPA MFA ------------------
 elif st.session_state.login_etapa == 'mfa':
     st.subheader("🔑 Verificação em Duas Etapas (MFA)")
+
     if not st.session_state.mostrar_codigo:
         if st.button("📩 Receber Código MFA"):
             st.session_state.mostrar_codigo = True
+            st.rerun()
     else:
         st.markdown(f"### ✉️ Seu código é: `{st.session_state.codigo_mfa}`")
 
-    with st.form("mfa_form"):
-        codigo_input = st.text_input("Digite o código recebido")
-        col1, col2 = st.columns(2)
-        with col1:
-            verificar = st.form_submit_button("✅ Verificar Código")
-        with col2:
-            voltar = st.form_submit_button("🔄 Voltar")
+    codigo_input = st.text_input("Digite o código recebido")
+    col1, col2 = st.columns(2)
+    with col1:
+        verificar = st.button("✅ Verificar Código")
+    with col2:
+        voltar = st.button("🔄 Voltar")
 
-        if verificar:
-            if codigo_input == st.session_state.codigo_mfa:
-                st.success("Código verificado com sucesso!")
-                st.session_state.usuario_autenticado = True
-                st.session_state.login_etapa = 'autenticado'
-            else:
-                st.error("Código incorreto. Tente novamente.")
+    if verificar:
+        if codigo_input == st.session_state.codigo_mfa:
+            st.success("Código verificado com sucesso!")
+            st.session_state.usuario_autenticado = True
+            st.session_state.login_etapa = 'autenticado'
+            st.rerun()
+        else:
+            st.error("Código incorreto. Tente novamente.")
 
-        if voltar:
-            st.session_state.login_etapa = 'login'
-            st.session_state.codigo_mfa = ''
-            st.session_state.mostrar_codigo = False
+    if voltar:
+        st.session_state.login_etapa = 'login'
+        st.session_state.codigo_mfa = ''
+        st.session_state.mostrar_codigo = False
+        st.rerun()
+
     st.stop()
 
+# ------------- BLOQUEIO SE NÃO AUTENTICADO ------------------
 if not st.session_state.usuario_autenticado:
     st.warning("⚠️ Acesso restrito. Faça login para visualizar o dashboard.")
     st.stop()
 
 # ---------------------- DASHBOARD ----------------------
-# Configuração da página
 st.set_page_config(page_title="Dashboard Imobiliário", layout="wide")
 st.title("🏠 Dashboard de Preços de Imóveis")
 
@@ -135,7 +142,9 @@ def gerar_grafico_bcb(df, indicador):
     df_filtrado['Data'] = pd.to_datetime(df_filtrado['Data'], errors='coerce')
     for col in ['Media', 'Mediana', 'DesvioPadrao', 'Minimo', 'Maximo']:
         df_filtrado[col] = df_filtrado[col].str.replace(',', '.').astype(float)
-    fig = px.line(df_filtrado, x='Data', y=['Media', 'Mediana', 'Minimo', 'Maximo'], title=f"Indicador: {indicador}", labels={"value": "Valor", "variable": "Métrica"})
+    fig = px.line(df_filtrado, x='Data', y=['Media', 'Mediana', 'Minimo', 'Maximo'],
+                  title=f"Indicador: {indicador}",
+                  labels={"value": "Valor", "variable": "Métrica"})
     return fig, df_filtrado
 
 def painel_projecoes():
@@ -154,9 +163,14 @@ def painel_projecoes():
     df.loc[(df["Acima do IPCA (8%)"]) & (~df["Acima do IGP-M (10%)"]), "Destaque"] += " ★★"
     df.loc[(~df["Acima do IPCA (8%)"]), "Destaque"] += " ★"
     df = df.sort_values(by="Preço 2027", ascending=False)
-    fig = px.bar(df, x="Destaque", y="Preço 2027", color="Crescimento (%)", text="Preço 2027", color_continuous_scale="Blues", title="🏠 Preço Médio Venda (R$/m²) - Projeção 2027")
+    fig = px.bar(df, x="Destaque", y="Preço 2027", color="Crescimento (%)", text="Preço 2027",
+                 color_continuous_scale="Blues",
+                 title="🏠 Preço Médio Venda (R$/m²) - Projeção 2027")
     fig.update_traces(texttemplate='R$%{text:,.0f}', textposition='outside')
-    fig.update_layout(showlegend=False, height=500, width=900, font=dict(family="Arial", size=12), uniformtext_minsize=8, uniformtext_mode='hide', xaxis_title="Cidades (★ = Acima do IPCA | ★★★ = Acima do IGP-M)", yaxis_title="Preço Médio Venda (R$/m²) - 2027")
+    fig.update_layout(showlegend=False, height=500, width=900, font=dict(family="Arial", size=12),
+                      uniformtext_minsize=8, uniformtext_mode='hide',
+                      xaxis_title="Cidades (★ = Acima do IPCA | ★★★ = Acima do IGP-M)",
+                      yaxis_title="Preço Médio Venda (R$/m²) - 2027")
     st.plotly_chart(fig)
     st.subheader("📄 Dados Usados na Projeção")
     st.dataframe(df.set_index("Cidade")[["Preço 2025", "Preço 2027", "Crescimento (%)"]])
