@@ -34,7 +34,6 @@ Bem-vindo ao Preditor de Preços Imobiliários Regionais! Este projeto inovador 
 A organização do repositório foi planejada para clareza e modularidade. 
 ```bash
 preditor_precos_imobiliarios/
-├── app/                   # Módulos do app Streamlit (interface e autenticação)
 ├── data/                  # Dados tratados de imóveis (venda e aluguel)
 ├── db/                    # Bancos locais e modelos pré-processados
 ├── infra/                 # Infraestrutura como código (Terraform + user_data.sh)
@@ -50,9 +49,10 @@ preditor_precos_imobiliarios/
 │   │   └── test_login_sucesso.py
 │   └── unit/              # Testes unitários
 │       └── test_app.py
-├── .github/               # GitHub Actions para deploy automatizado
+├── .github/               
 │   └── workflows/
-│       └── deploy.yml
+│       └── deploy.yml     # GitHub Actions para deploy automatizado
+│       └── tests.yml      # GitHub Actions para testes automatizados
 ├── .gitignore             # Ignora arquivos sensíveis e diretórios de build
 ├── app.py                 # Código principal do app com MFA + dashboard
 ├── LICENSE                # Licença MIT do projeto
