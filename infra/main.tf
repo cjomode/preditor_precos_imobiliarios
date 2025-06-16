@@ -20,3 +20,6 @@ resource "aws_security_group" "streamlit_sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 }
+
+
+#endereço do deploy http://18.207.195.171:8501/
