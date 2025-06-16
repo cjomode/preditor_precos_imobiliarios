@@ -14,7 +14,7 @@ estado_inicial = {
     'codigo_mfa': '',
     'mostrar_codigo': False,
     'usuario_autenticado': False,
-    'verificacao_mfa_sucesso': False
+    'verificacao_mfa_sucesso': False:::
 }
 
 for chave, valor in estado_inicial.items():
