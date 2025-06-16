@@ -15,15 +15,12 @@ driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), opti
 wait = WebDriverWait(driver, 15)
 
 try:
-    # 1. Acessar o app
     driver.get("http://localhost:8501")
 
-    # 2. Preencher usuário e senha
     input_fields = wait.until(EC.presence_of_all_elements_located((By.TAG_NAME, "input")))
     input_fields[0].send_keys("admin")
     input_fields[1].send_keys("admin")
 
-    # 3. Clicar em "➡️ Entrar"
     print("🔍 Procurando o botão 'Entrar'...")
     entrar_button = wait.until(
         EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Entrar')]"))
@@ -33,7 +30,6 @@ try:
     ActionChains(driver).move_to_element(entrar_button).click().perform()
     print("🖱️ Botão 'Entrar' clicado!")
 
-    # 4. Clicar em "Receber Código MFA"
     print("⏳ Aguardando aparecer o botão 'Receber Código MFA'...")
     mfa_button = wait.until(
         EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Receber Código MFA')]"))
@@ -43,7 +39,6 @@ try:
     ActionChains(driver).move_to_element(mfa_button).click().perform()
     print("📨 Botão 'Receber Código MFA' clicado!")
 
-   # 5. Aguardar e pegar o código MFA exibido (com espera robusta)
     print("⏳ Aguardando o código MFA ser exibido...")
     codigo_mfa = None
 
@@ -60,15 +55,14 @@ try:
             time.sleep(1)
     else:
         raise Exception("❌ Tempo esgotado: Código MFA não foi encontrado!")
-    
-    # 6. Preencher o campo de código MFA
+
     codigo_input = wait.until(
         EC.visibility_of_element_located((By.ID, "text_input_3"))
     )
     codigo_input.send_keys(codigo_mfa)
     print("🔢 Código MFA preenchido!")
 
-    # 7. Clicar em "Verificar Código"
+
     print("⏳ Aguardando o botão 'Verificar Código' ficar clicável...")
 
     verificar_button = wait.until(
@@ -91,14 +85,12 @@ try:
     print("✅ Código verificado com sucesso!")
     time.sleep(2) 
     
-   # 8. IMEDIATAMENTE validar a mensagem de sucesso
     print("🔍 Aguardando mensagem de sucesso...")
     mensagem_sucesso = wait.until(
         EC.visibility_of_element_located((By.XPATH,
             "//div[@class='stAlert']//div[normalize-space()='✅ Código verificado com sucesso!']"))
     )
 
-    # Fazer o assert aqui, antes do redirecionamento
     assert mensagem_sucesso.is_displayed(), "❌ Mensagem de sucesso NÃO foi exibida!"
     print("✅ Mensagem validada com sucesso!")
 

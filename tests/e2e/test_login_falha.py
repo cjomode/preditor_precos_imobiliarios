@@ -21,7 +21,7 @@ def recarregar_pagina():
     driver.get("http://localhost:8501")
     time.sleep(2) 
 
-
+# 1. Campos de login e senha vazios
 def teste_campos_vazios():
     driver.get("http://localhost:8501")
     print("\n🧪 Cenário 1: Login com campos vazios")
@@ -50,7 +50,7 @@ def teste_campos_vazios():
 
     print(f"✅ Mensagem correta: '{texto_encontrado}'")
 
-
+# 2. Campos de login e senha com dados inválidos
 def teste_credenciais_incorretas():
     print("\n🧪 Cenário 2: Login com credenciais incorretas")
 
@@ -82,6 +82,7 @@ def teste_credenciais_incorretas():
 
     print(f"✅ Mensagem correta: '{texto_encontrado}'")
 
+# 3. Código MFA incorreto
 def teste_codigo_mfa_incorreto():
     print("\n🧪 Cenário 3: Verificação MFA com código incorreto")
 
@@ -103,7 +104,6 @@ def teste_codigo_mfa_incorreto():
     )
     receber_codigo.click()
 
-    # 6. Preencher o campo de código MFA com valor incorreto
     codigo_input = wait.until(
         EC.visibility_of_element_located((By.ID, "text_input_3"))
     )
