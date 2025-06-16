@@ -1,28 +1,75 @@
-# Chaves e arquivos sensíveis
-infra/minha-chave.pub
-
-# Diretórios e arquivos do Terraform
+# ==============================
+# 🌐 ARQUIVOS DE INFRA (Terraform)
+# ==============================
 *.tfstate
 *.tfstate.backup
 .terraform/
 terraform.tfstate
 terraform.tfstate.backup
+infra/minha-chave.pub
 
-# Ambiente virtual do Python
+# ==============================
+# 🐍 PYTHON & AMBIENTE VIRTUAL
+# ==============================
 .venv/
-.env
+venv/
+env/
 __pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
 
-# IDEs
-.vscode/
-*.code-workspace
-
-# Arquivos de log
+# ==============================
+# 📦 DEPENDÊNCIAS E LOGS
+# ==============================
 *.log
+*.bak
+*.swp
+*.tmp
 
-# Pycache
-*.pyc
-.pytest_cache
+# ==============================
+# 📁 ARQUIVOS TEMPORÁRIOS DE TESTES
+# ==============================
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+nosetests.xml
+test-results.xml
+junit-*.xml
 
-# Pasta 
+# ==============================
+# 🧪 ARQUIVOS DE TESTES AUTOMÁTICOS
+# ==============================
+tests/__pycache__/
+tests/**/*.pyc
+
+# ==============================
+# 📒 JUPYTER NOTEBOOKS CACHE
+# ==============================
+.ipynb_checkpoints/
+
+# ==============================
+# 💻 IDEs E SISTEMAS OPERACIONAIS
+# ==============================
+.vscode/
+.idea/
+*.code-workspace
+*.DS_Store
+Thumbs.db
+
+# ==============================
+# 🧾 BASES DE DADOS & CSVs
+# ==============================
+*.db
+*.sqlite3
+*.csv
+data/
+db/
 csv/
+
+# ==============================
+# 🚀 STREAMLIT TEMP FILES
+# ==============================
+.streamlit/
