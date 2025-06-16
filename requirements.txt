@@ -4,3 +4,4 @@ pandas
 jupyter
 pytest
 selenium
+webdriver-manager
