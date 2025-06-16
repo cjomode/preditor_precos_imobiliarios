@@ -1,0 +1,14 @@
+name: Executar Testes
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Instalar dependências
+      run: pip install -r requirements.txt
+    - name: Executar testes
+      run:  python -m pytest tests/unit
