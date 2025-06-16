@@ -9,7 +9,7 @@ terraform.tfstate
 terraform.tfstate.backup
 
 # Ambiente virtual do Python
-venv/
+.venv/
 .env
 __pycache__/
 
@@ -22,3 +22,7 @@ __pycache__/
 
 # Pycache
 *.pyc
+.pytest_cache
+
+# Pasta 
+csv/
