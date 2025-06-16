@@ -34,24 +34,31 @@ Bem-vindo ao Preditor de Preços Imobiliários Regionais! Este projeto inovador 
 A organização do repositório foi planejada para clareza e modularidade. 
 ```bash
 preditor_precos_imobiliarios/
-├── app/                    # Módulos do app Streamlit (interface e autenticação)
-├── data/                   # Dados tratados de imóveis (venda e aluguel)
-├── db/                     # Bancos locais e modelos pré-processados
-├── infra/                  # Infraestrutura como código (Terraform + user_data.sh)
+├── data/                  # Dados tratados de imóveis (venda e aluguel)
+├── db/                    # Bancos locais e modelos pré-processados
+├── infra/                 # Infraestrutura como código (Terraform + user_data.sh)
 │   ├── main.tf
 │   ├── outputs.tf
 │   ├── user_data.sh
 │   └── variables.tf
-├── notebooks/              # Notebooks de EDA e desenvolvimento de modelo
-├── script/                 # Scripts auxiliares para tratamento de dados e ML
-├── .github/
+├── notebooks/             # Notebooks de EDA e desenvolvimento de modelo
+├── script/                # Scripts auxiliares para tratamento de dados e ML
+├── tests/                 # Testes automatizados
+│   ├── e2e/               # Testes ponta-a-ponta (end-to-end)
+│   │   ├── test_login_falha.py
+│   │   └── test_login_sucesso.py
+│   └── unit/              # Testes unitários
+│       └── test_app.py
+├── .github/               
 │   └── workflows/
-│       └── deploy.yml      # GitHub Actions para deploy automatizado
-├── .gitignore              # Ignora arquivos sensíveis e diretórios de build
-├── app.py                  # Código principal do app com MFA + dashboard
-├── LICENSE                 # Licença MIT do projeto
-├── README.md               # Documentação do projeto (você está aqui!)
-└── requirements.txt        # Dependências do projeto (pip)
+│       └── deploy.yml     # GitHub Actions para deploy automatizado
+│       └── tests.yml      # GitHub Actions para testes automatizados
+├── .gitignore             # Ignora arquivos sensíveis e diretórios de build
+├── app.py                 # Código principal do app com MFA + dashboard
+├── LICENSE                # Licença MIT do projeto
+├── README.md              # Documentação do projeto (você está aqui!)
+└── requirements.txt       # Dependências do projeto (pip)
+
 ```
 # 🛠️ Tecnologias e Ferramentas Utilizadas
 
@@ -111,7 +118,7 @@ Isso iniciará o servidor local do Streamlit. O console exibirá um URL (por pad
 #### 5. Use o dashboard: Ao acessar o app, você será apresentado à tela de login com MFA. Insira suas credenciais de acesso e o código de autenticação de dois fatores (conforme configurado) para entrar.
 Uma vez autenticado, você poderá navegar pelos gráficos interativos e consultar previsões de valorização/desvalorização para diferentes cidades e cenários. 🎉
 
-# ☁️ Deploy Futuro em EC2 com Terraform
+# ☁️ Deploy EC2 com Terraform
 
 Deploy automatizado está a caminho! Em breve, planejamos disponibilizar este aplicativo na nuvem usando a infraestrutura definida por Terraform. Todo o necessário já está configurado no diretório infra/. Em resumo, o plano de deploy é:
 
