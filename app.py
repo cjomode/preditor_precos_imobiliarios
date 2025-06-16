@@ -32,7 +32,6 @@ def exibir_login():
     </div>
     """, unsafe_allow_html=True)
     st.subheader("🔐 Acesso Restrito")
-
     with st.form("login_form"):
         usuario = st.text_input("Usuário", placeholder="Digite seu nome de usuário")
         senha = st.text_input("Senha", type="password", placeholder="Digite sua senha")
@@ -80,6 +79,11 @@ def exibir_mfa():
             for chave in ['login_etapa', 'codigo_mfa', 'mostrar_codigo']:
                 st.session_state[chave] = estado_inicial[chave]
             st.rerun()
+        if voltar:
+            for chave in ['login_etapa', 'codigo_mfa', 'mostrar_codigo']:
+                st.session_state[chave] = estado_inicial[chave]
+            st.rerun()
+
 
     st.stop()
 
@@ -167,10 +171,12 @@ def painel_projecoes():
                       xaxis_title="Cidades (★ = Acima do IPCA | ★★★ = Acima do IGP-M)",
                       yaxis_title="Preço Médio Venda (R$/m²) - 2027")
     st.plotly_chart(fig)
+
     st.subheader("📄 Dados Usados")
     st.dataframe(df.set_index("Cidade")[["Preço 2025", "Preço 2027", "Crescimento (%)"]])
 
 # ---------------------- MAIN ----------------------
+
 def main():
     if st.session_state.login_etapa == 'login':
         exibir_login()
