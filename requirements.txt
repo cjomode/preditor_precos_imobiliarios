@@ -5,3 +5,5 @@ jupyter
 pytest
 selenium
 webdriver-manager
+scikit-learn
+prophet
