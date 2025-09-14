@@ -1,6 +1,9 @@
 streamlit
 plotly
 pandas
+scikit-learn
+numpy
+joblib
 jupyter
 pytest
 selenium
