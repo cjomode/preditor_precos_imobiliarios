@@ -22,7 +22,7 @@ import sqlite3
 
 cidades = [
     'recife',
-    'fortaleza'
+    'fortaleza',
     'maceio',
     'aracaju',
     'salvador',
