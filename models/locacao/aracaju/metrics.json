@@ -1,0 +1,21 @@
+{
+  "ACCURACY": 1.0,
+  "PRECISION": 1.0,
+  "RECALL": 1.0,
+  "F1": 1.0,
+  "ROC_AUC": null,
+  "CONFUSION_MATRIX": [
+    [
+      4,
+      0
+    ],
+    [
+      0,
+      5
+    ]
+  ],
+  "LABELS": [
+    "Alto",
+    "Baixo"
+  ]
+}
