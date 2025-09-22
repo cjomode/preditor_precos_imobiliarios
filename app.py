@@ -1,224 +1,365 @@
-import streamlit as st
-import time
+# -*- coding: utf-8 -*-
+# app.py — RF01, RF02, RF03 + RNFs (versão “à prova de susto”)
+import os
+import sqlite3
+from datetime import date, datetime
+from typing import Dict, List
+
+import numpy as np
 import pandas as pd
 import plotly.express as px
-import os
-import random
+import streamlit as st
 
-# ---------------------- CONFIG GERAL ----------------------
+# ML
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.linear_model import LinearRegression
+
+# ----------------- CONFIG -----------------
 st.set_page_config(page_title="Preditor Imobiliário", layout="wide")
 
-# ---------------------- ESTADO DA SESSÃO ----------------------
-estado_inicial = {
-    'login_etapa': 'login',
-    'codigo_mfa': '',
-    'mostrar_codigo': False,
-    'usuario_autenticado': False,
-    'verificacao_mfa_sucesso': False
-}
+HERE = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(HERE, "db", "warehouse.db")   # produzido pela ETL
+PREC_COL = 'Preço médio (R$/m²)Total'                 # métrica-alvo padrão
 
-for chave, valor in estado_inicial.items():
-    if chave not in st.session_state:
-        st.session_state[chave] = valor
+# ----------------- DB HELPERS -----------------
+def _connect() -> sqlite3.Connection:
+    """Conexão confiável (RNF02)."""
+    conn = sqlite3.connect(DB_PATH, detect_types=sqlite3.PARSE_DECLTYPES)
+    with conn:
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("PRAGMA synchronous=NORMAL;")
+        conn.execute("PRAGMA foreign_keys=ON;")
+    return conn
 
-# ---------------------- FUNÇÕES DE AUTENTICAÇÃO ----------------------
-def gerar_codigo_mfa():
-    return str(random.randint(100000, 999999))
+@st.cache_data(show_spinner=False, ttl=300)
+def _sql(q: str, params: tuple | None = None) -> pd.DataFrame:
+    with _connect() as conn:
+        return pd.read_sql_query(q, conn, params=params)
 
-def exibir_login():
-    st.markdown("""
-    <div style="text-align:center">
-        <h1>🏠 Preditor de Preços Imobiliários Regionais</h1>
-    </div>
-    """, unsafe_allow_html=True)
-    st.subheader("🔐 Acesso Restrito")
-    with st.form("login_form"):
-        usuario = st.text_input("Usuário", placeholder="Digite seu nome de usuário")
-        senha = st.text_input("Senha", type="password", placeholder="Digite sua senha")
-        if st.form_submit_button("➡️ Entrar"):
-            if usuario == "admin" and senha == "admin":
-                st.session_state.codigo_mfa = gerar_codigo_mfa()
-                st.session_state.login_etapa = 'mfa'
-                st.rerun()
-            else:
-                st.error("❌ Usuário ou senha inválidos.")
-    st.stop()
+def _exec(q: str, params: tuple = ()) -> None:
+    with _connect() as conn:
+        conn.execute("BEGIN")
+        conn.execute(q, params)
+        conn.commit()
 
-def exibir_mfa():
-    st.subheader("🔑 Verificação em Duas Etapas (MFA)")
+def _exec_many(q: str, rows: list[tuple]) -> None:
+    with _connect() as conn:
+        conn.execute("BEGIN")
+        conn.executemany(q, rows)
+        conn.commit()
 
-    if not st.session_state.mostrar_codigo:
-        if st.button("📩 Receber Código MFA"):
-            st.session_state.mostrar_codigo = True
-            st.rerun()
+@st.cache_data(show_spinner=False)
+def _lista_cidades(tabela: str) -> List[str]:
+    df = _sql(f"SELECT DISTINCT Cidade FROM {tabela} ORDER BY Cidade;")
+    return df["Cidade"].dropna().tolist()
+
+@st.cache_data(show_spinner=False)
+def _carregar_cidade(tabela: str, cidade: str) -> pd.DataFrame:
+    df = _sql(f"SELECT * FROM {tabela} WHERE Cidade = ? ORDER BY Data;", (cidade,))
+    if "Data" in df.columns:
+        df["Data"] = pd.to_datetime(df["Data"], errors="coerce")
+        df = df.dropna(subset=["Data"]).sort_values("Data")
+    return df.reset_index(drop=True)
+
+def _cols_tabela(tabela: str) -> List[str]:
+    with _connect() as conn:
+        cur = conn.execute(f'PRAGMA table_info("{tabela}");')
+        return [r[1] for r in cur.fetchall()]
+
+# ----------------- VALIDAÇÃO (RNF03) -----------------
+def _num_ok(x: float) -> bool:
+    return x is not None and np.isfinite(x) and x > 0
+
+def _date_ok(s: str) -> bool:
+    try:
+        datetime.strptime(s, "%Y-%m-%d")
+        return True
+    except Exception:
+        return False
+
+# ----------------- HELPERS RF01 (lote/tempo) -----------------
+def _date_range_months(start: str, end: str) -> list[str]:
+    """Primeiro dia de cada mês entre start e end (YYYY-MM-DD)."""
+    s = pd.to_datetime(start, errors="coerce")
+    e = pd.to_datetime(end, errors="coerce")
+    if pd.isna(s) or pd.isna(e) or s > e:
+        return []
+    rng = pd.date_range(s, e, freq="MS")
+    return [d.strftime("%Y-%m-%d") for d in rng]
+
+def _last_price_or(df: pd.DataFrame, default: float = 0.0) -> float:
+    col = PREC_COL if PREC_COL in df.columns else None
+    if col and len(df):
+        s = pd.to_numeric(df[col], errors="coerce").dropna()
+        if len(s):
+            return float(s.iloc[-1])
+    return float(default)
+
+# ----------------- RF01: CAPTURA/ARMAZENAMENTO -----------------
+def painel_captura():
+    st.subheader("🧾 Captura de dados (RF01)")
+    st.caption("Salva no SQLite — modo único ou em lote por período.")
+
+    tipo_map = {"Locação": "locacao", "Venda": "vendas"}
+    tipo_label = st.selectbox("Tipo de mercado", list(tipo_map.keys()))
+    tabela = tipo_map[tipo_label]
+
+    cidades = _lista_cidades(tabela) or _lista_cidades("locacao") or _lista_cidades("vendas")
+    if not cidades:
+        st.error("Nenhuma cidade encontrada. Rode a ETL primeiro.")
+        return
+    cidade = st.selectbox("Cidade", cidades)
+
+    cols = _cols_tabela(tabela)
+    col_ok = PREC_COL in cols
+    if not col_ok:
+        st.warning(f"Atenção: coluna '{PREC_COL}' não existe em {tabela}. O registro terá apenas metadados.")
+
+    modo = st.radio("Modo de captura", ["Único", "Lote (período)"], horizontal=True)
+
+    if modo == "Único":
+        data_str = st.date_input("Data (AAAA-MM-DD)", value=date.today()).strftime("%Y-%m-%d")
+        preco = st.number_input(f"{PREC_COL}", min_value=0.0, step=0.1, format="%.2f",
+                                value=_last_price_or(_carregar_cidade(tabela, cidade), 0.0))
+        st.info("Validações: data válida, preço > 0 e cidade definida. (RNF03)")
+
+        if st.button("💾 Salvar registro"):
+            if not _date_ok(data_str):
+                st.error("Data inválida.")
+                return
+            if col_ok and not _num_ok(preco):
+                st.error("Preço deve ser maior que zero.")
+                return
+
+            payload = {"Data": data_str, "Cidade": cidade, "UF": None, "TipoMercado": tipo_label}
+            if col_ok:
+                payload[PREC_COL] = float(preco)
+
+            use_cols = [c for c in payload if c in cols]
+            placeholders = ",".join(["?"] * len(use_cols))
+            quoted_cols = ",".join([f'"{c}"' for c in use_cols])
+            params = tuple(payload[c] for c in use_cols)
+
+            _exec(f'INSERT INTO {tabela} ({quoted_cols}) VALUES ({placeholders});', params)
+            st.success(f"1 registro inserido em **{tabela}** para **{cidade}** em **{data_str}**.")
+            _lista_cidades.clear(); _carregar_cidade.clear(); _sql.clear()
+
     else:
-        st.markdown(f"### ✉️ Seu código é: `{st.session_state.codigo_mfa}`")
+        c1, c2 = st.columns(2)
+        with c1:
+            inicio = st.date_input("Início (mês incluso)", value=pd.Timestamp("2022-01-01")).strftime("%Y-%m-%d")
+        with c2:
+            fim = st.date_input("Fim (mês incluso)", value=pd.Timestamp("2025-08-01")).strftime("%Y-%m-%d")
 
-    with st.form("mfa_form"):
-        codigo_input = st.text_input("Digite o código recebido")
+        base = _last_price_or(_carregar_cidade(tabela, cidade), 0.0)
+        preco_base = st.number_input(f"Valor base para {PREC_COL}", min_value=0.0, step=0.1, format="%.2f", value=base)
+        ramp = st.checkbox("Aplicar rampa (crescimento linear no período)?", value=False)
+        delta_total = st.number_input("Variação total no período (ex.: +2.50)", value=0.00, step=0.10, format="%.2f") if ramp else 0.0
 
-        col1, col2 = st.columns(2)
-        with col1:
-            verificar = st.form_submit_button("✅ Verificar Código")
-        with col2:
-            voltar = st.form_submit_button("🔄 Voltar")
+        datas = _date_range_months(inicio, fim)
+        st.caption(f"Período gerará **{len(datas)}** linhas (1ª de cada mês).")
 
-        if verificar:
-            if not codigo_input.strip():
-                st.warning("⚠️ O campo de código está vazio.")
-            elif codigo_input == st.session_state.codigo_mfa:
-                st.success("✅ Código verificado com sucesso!")
-                time.sleep(2)
-                st.session_state.usuario_autenticado = True
-                st.session_state.login_etapa = 'autenticado'
-                st.rerun()
-            else:
-                st.error("❌ Código incorreto. Tente novamente.")
+        if st.button("💾 Salvar lote de registros"):
+            if not datas:
+                st.error("Período inválido.")
+                return
+            if col_ok and not _num_ok(preco_base):
+                st.error("Preço base deve ser maior que zero.")
+                return
 
-        if voltar:
-            for chave in ['login_etapa', 'codigo_mfa', 'mostrar_codigo']:
-                st.session_state[chave] = estado_inicial[chave]
-            st.rerun()
-        if voltar:
-            for chave in ['login_etapa', 'codigo_mfa', 'mostrar_codigo']:
-                st.session_state[chave] = estado_inicial[chave]
-            st.rerun()
+            valores = []
+            for i, _d in enumerate(datas):
+                v = float(preco_base)
+                if ramp and len(datas) > 1:
+                    v += (delta_total * (i / (len(datas) - 1)))
+                valores.append(v)
 
+            base_cols = ["Data", "Cidade", "UF", "TipoMercado"]
+            use_cols = [c for c in base_cols + ([PREC_COL] if col_ok else []) if c in cols]
+            quoted_cols = ",".join([f'"{c}"' for c in use_cols])
+            placeholders = ",".join(["?"] * len(use_cols))
 
-    st.stop()
+            rows = []
+            for d, v in zip(datas, valores):
+                payload = {"Data": d, "Cidade": cidade, "UF": None, "TipoMercado": tipo_label}
+                if col_ok:
+                    payload[PREC_COL] = float(v)
+                rows.append(tuple(payload[c] for c in use_cols))
 
-# ---------------------- DADOS ----------------------
-DATA_DIR = "data"
+            # política: não duplica — apaga o range & reinsere
+            with _connect() as conn:
+                conn.execute("BEGIN")
+                conn.execute(f'DELETE FROM {tabela} WHERE Cidade = ? AND Data BETWEEN ? AND ?;', (cidade, inicio, fim))
+                conn.executemany(f'INSERT INTO {tabela} ({quoted_cols}) VALUES ({placeholders});', rows)
+                conn.commit()
 
-cidades_arquivos = {
-    "Locação": {
-        "Aracaju": "dados_locacao_aracaju_tratado.csv",
-        "Fortaleza": "dados_locacao_fortaleza_tratado.csv",
-        "João Pessoa": "dados_locacao_joao_pessoa_tratado.csv",
-        "Maceió": "dados_locacao_maceio_tratado.csv",
-        "Natal": "dados_locacao_natal_tratado.csv",
-        "Recife": "dados_locacao_recife_tratado.csv",
-        "Salvador": "dados_locacao_salvador_tratado.csv",
-        "São Luís": "dados_locacao_sao_luis_tratado.csv",
-        "Teresina": "dados_locacao_teresina_tratado.csv"
-    },
-    "Venda": {
-        "Aracaju": "dados_vendas_aracaju_tratados.csv",
-        "Fortaleza": "dados_vendas_fortaleza_tratados.csv",
-        "João Pessoa": "dados_vendas_joao_pessoa_tratados.csv",
-        "Maceió": "dados_vendas_maceio_tratados.csv",
-        "Natal": "dados_vendas_natal_tratados.csv",
-        "Recife": "dados_vendas_recife_tratados.csv",
-        "Salvador": "dados_vendas_salvador_tratados.csv",
-        "São Luís": "dados_vendas_sao_luis_tratados.csv",
-        "Teresina": "dados_vendas_teresina_tratados.csv"
-    }
-}
+            st.success(f"{len(rows)} registros inseridos em **{tabela}** para **{cidade}** ({inicio} → {fim}).")
+            _lista_cidades.clear(); _carregar_cidade.clear(); _sql.clear()
 
-colunas_corretas = {
-    'Preço médio (R$/m²) Total': 'Preço médio (R$/m²)Total',
-    'Preço médio (R$/m²)Total ': 'Preço médio (R$/m²)Total',
-    ' Preço médio (R$/m²)Total': 'Preço médio (R$/m²)Total'
-}
+# ----------------- RF02: DASHBOARD -----------------
+def painel_dashboard():
+    st.subheader("📊 Dashboard inicial (RF02)")
+    tipo_map = {"Locação": "locacao", "Venda": "vendas"}
+    tipo_label = st.sidebar.selectbox("Tipo de mercado", list(tipo_map.keys()), key="dash_tipo")
+    tabela = tipo_map[tipo_label]
 
-def carregar_dados(caminho):
-    df = pd.read_csv(caminho, sep=';')
-    df.rename(columns=colunas_corretas, inplace=True)
-    if 'Data' in df.columns:
-        df['Data'] = pd.to_datetime(df['Data'], errors='coerce')
-        df.dropna(subset=['Data'], inplace=True)
-    return df
+    cidades = _lista_cidades(tabela)
+    if not cidades:
+        st.error("Nenhuma cidade encontrada. Rode a ETL.")
+        return
+    cidade = st.sidebar.selectbox("Cidade", cidades, key="dash_cidade")
 
-def gerar_grafico_imobiliario(df, cidade, metrica):
-    if "variação" in metrica.lower():
-        fig = px.bar(df, x='Data', y=metrica, title=f"{metrica} - {cidade}")
+    df = _carregar_cidade(tabela, cidade)
+    if df.empty:
+        st.warning("Sem dados para esta cidade.")
+        return
+
+    # Filtro de período
+    if "Data" in df.columns:
+        data_min, data_max = df["Data"].min(), df["Data"].max()
+        d_ini, d_fim = st.sidebar.date_input(
+            "Período",
+            value=(data_min.to_pydatetime().date(), data_max.to_pydatetime().date())
+        )
+        if d_ini and d_fim:
+            df = df[(df["Data"] >= pd.to_datetime(d_ini)) & (df["Data"] <= pd.to_datetime(d_fim))]
+
+    num_cols = [c for c in df.select_dtypes(include=[np.number]).columns if c not in {"Ano", "Mes", "Trimestre"}]
+    default = PREC_COL if PREC_COL in df.columns else (num_cols[0] if num_cols else None)
+    if not default:
+        st.warning("Nenhuma métrica numérica encontrada.")
+        return
+
+    metrica = st.sidebar.selectbox("Métrica", [default] + [c for c in num_cols if c != default], key="dash_metrica")
+    fig = px.line(df, x="Data", y=metrica, title=f"{tipo_label} • {cidade} • {metrica}", markers=True)
+    st.plotly_chart(fig, use_container_width=True)
+
+    with st.expander("Ver dados brutos"):
+        st.dataframe(df)
+
+# ----------------- RF03: MODELO -----------------
+def _avaliar(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float]:
+    mae = mean_absolute_error(y_true, y_pred)
+    rmse = float(np.sqrt(mean_squared_error(y_true, y_pred)))
+    r2 = r2_score(y_true, y_pred)
+    return {"MAE": float(mae), "RMSE": float(rmse), "R2": float(r2)}
+
+def _prep_features_for_model(df: pd.DataFrame, alvo: str) -> pd.DataFrame:
+    """Cria Ano/Mes/Trimestre, mantém só numéricas, elimina NaN/inf."""
+    df = df.copy()
+    if "Data" in df.columns:
+        dt = pd.to_datetime(df["Data"], errors="coerce")
+        df["Ano"] = dt.dt.year
+        df["Mes"] = dt.dt.month
+        df["Trimestre"] = dt.dt.quarter
+
+    if df[alvo].dtype == "object":
+        df[alvo] = pd.to_numeric(df[alvo], errors="coerce")
+
+    num_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+    if alvo not in num_cols:
+        return pd.DataFrame()
+
+    keep = [c for c in num_cols if c != alvo]
+    X = df[keep].replace([np.inf, -np.inf], np.nan).dropna()
+    y = df.loc[X.index, alvo].astype(float)
+
+    mask = y.notna()
+    X, y = X.loc[mask], y.loc[mask]
+
+    if X.shape[1] == 0 or len(X) < 10:
+        return pd.DataFrame()
+
+    X[alvo] = y
+    return X
+
+def painel_modelo():
+    st.subheader("🧠 Modelo preditivo (RF03)")
+    st.caption("Árvore de Decisão (exercício) ou Regressão Linear — com features numéricas e filtro de período.")
+
+    tipo_map = {"Locação": "locacao", "Venda": "vendas"}
+    tipo_label = st.selectbox("Tipo de mercado", list(tipo_map.keys()), key="mdl_tipo")
+    tabela = tipo_map[tipo_label]
+
+    cidades = _lista_cidades(tabela)
+    if not cidades:
+        st.error("Nenhuma cidade encontrada.")
+        return
+    cidade = st.selectbox("Cidade", cidades, key="mdl_cidade")
+
+    df = _carregar_cidade(tabela, cidade)
+    if df.empty:
+        st.warning("Sem dados.")
+        return
+
+    # Filtro de período de treino
+    if "Data" in df.columns:
+        data_min, data_max = df["Data"].min(), df["Data"].max()
+        d_ini, d_fim = st.date_input(
+            "Período do treino",
+            value=(data_min.to_pydatetime().date(), data_max.to_pydatetime().date())
+        )
+        if d_ini and d_fim:
+            df = df[(df["Data"] >= pd.to_datetime(d_ini)) & (df["Data"] <= pd.to_datetime(d_fim))]
+
+    alvo_default = PREC_COL if PREC_COL in df.columns else df.select_dtypes(include=[np.number]).columns[-1]
+    alvo = st.selectbox("Coluna alvo", [alvo_default] + [c for c in df.select_dtypes(include=[np.number]).columns if c != alvo_default])
+
+    data_num = _prep_features_for_model(df, alvo)
+    if data_num.empty:
+        st.error("Dados insuficientes para treinar (≥10 linhas e ≥1 feature numérica além do alvo).")
+        return
+
+    X = data_num.drop(columns=[alvo])
+    y = data_num[alvo].astype(float)
+
+    X_tr, X_te, y_tr, y_te = train_test_split(X, y, test_size=0.2, random_state=42)
+
+    modelo_nome = st.radio("Modelo", ["Árvore de Decisão (exercício)", "Regressão Linear"], horizontal=True)
+    mdl = DecisionTreeRegressor(random_state=42, max_depth=5) if modelo_nome.startswith("Árvore") else LinearRegression()
+
+    mdl.fit(X_tr, y_tr)
+    pred = mdl.predict(X_te)
+
+    metrics = _avaliar(y_te.values, pred)
+    c1, c2, c3 = st.columns(3)
+    c1.metric("MAE", f"{metrics['MAE']:.2f}")
+    c2.metric("RMSE", f"{metrics['RMSE']:.2f}")
+    c3.metric("R²", f"{metrics['R2']:.3f}")
+
+    if metrics["R2"] >= 0.5:
+        st.success("Modelo pré-validado para consulta (R² ≥ 0,5).")
     else:
-        fig = px.line(df, x='Data', y=metrica, title=f"{metrica} - {cidade}", markers=True)
-    return fig
+        st.warning("Modelo com baixo R² — tente outra cidade/período/feature.")
 
-def gerar_grafico_bcb(df, indicador):
-    df_filtrado = df[df['Indicador'] == indicador].copy()
-    df_filtrado['Data'] = pd.to_datetime(df_filtrado['Data'], errors='coerce')
-    for col in ['Media', 'Mediana', 'DesvioPadrao', 'Minimo', 'Maximo']:
-        df_filtrado[col] = df_filtrado[col].str.replace(',', '.').astype(float)
-    fig = px.line(df_filtrado, x='Data', y=['Media', 'Mediana', 'Minimo', 'Maximo'],
-                  title=f"Indicador: {indicador}",
-                  labels={"value": "Valor", "variable": "Métrica"})
-    return fig, df_filtrado
+    eval_df = pd.DataFrame({"Real": y_te.values, "Previsto": pred})
+    # Fallback: trendline só se statsmodels estiver instalado
+    try:
+        fig_sc = px.scatter(eval_df, x="Real", y="Previsto", title="Real vs Previsto", trendline="ols")
+    except Exception:
+        fig_sc = px.scatter(eval_df, x="Real", y="Previsto", title="Real vs Previsto")
+    st.plotly_chart(fig_sc, use_container_width=True)
 
-def painel_projecoes():
-    st.subheader("📈 Projeção de Preço Médio até 2027")
-    data = {
-        "Cidade": ["São Luís", "Recife", "Natal", "Fortaleza", "Salvador", "João Pessoa", "Maceió", "Teresina", "Aracaju"],
-        "Preço 2025": [10500, 10300, 10558, 10762, 9980, 8950, 7600, 6200, 5860],
-        "Preço 2027": [12400, 12200, 12158, 12462, 11900, 10650, 8800, 7300, 6700],
-        "Crescimento (%)": [10.0, 9.7, 9.5, 9.0, 9.3, 8.8, 7.0, 6.5, 5.5],
-        "Acima do IPCA (8%)": [True, True, True, True, True, True, False, False, False],
-        "Acima do IGP-M (10%)": [False]*9
-    }
-    df = pd.DataFrame(data)
-    df["Destaque"] = df["Cidade"]
-    df.loc[df["Acima do IGP-M (10%)"], "Destaque"] += " ★★★"
-    df.loc[(df["Acima do IPCA (8%)"]) & (~df["Acima do IGP-M (10%)"]), "Destaque"] += " ★★"
-    df.loc[(~df["Acima do IPCA (8%)"]), "Destaque"] += " ★"
-    df = df.sort_values(by="Preço 2027", ascending=False)
-    fig = px.bar(df, x="Destaque", y="Preço 2027", color="Crescimento (%)", text="Preço 2027",
-                 color_continuous_scale="Blues",
-                 title="🏠 Projeção de Preço Médio Venda (R$/m²) - 2027")
-    fig.update_traces(texttemplate='R$%{text:,.0f}', textposition='outside')
-    fig.update_layout(showlegend=False, height=500, width=900,
-                      font=dict(family="Arial", size=12),
-                      xaxis_title="Cidades (★ = Acima do IPCA | ★★★ = Acima do IGP-M)",
-                      yaxis_title="Preço Médio Venda (R$/m²) - 2027")
-    st.plotly_chart(fig)
+    st.plotly_chart(px.histogram(eval_df["Previsto"] - eval_df["Real"], nbins=30, title="Resíduos (Previsto - Real)"),
+                    use_container_width=True)
 
-    st.subheader("📄 Dados Usados")
-    st.dataframe(df.set_index("Cidade")[["Preço 2025", "Preço 2027", "Crescimento (%)"]])
-
-# ---------------------- MAIN ----------------------
-
+# ----------------- LAYOUT -----------------
 def main():
-    if st.session_state.login_etapa == 'login':
-        exibir_login()
-    elif st.session_state.login_etapa == 'mfa':
-        exibir_mfa()
+    st.title("🏠 Preditor Imobiliário")
+    st.caption("Atende RF01, RF02, RF03 + RNF01..RNF04. Base: db/warehouse.db (ETL).")
 
-    if not st.session_state.usuario_autenticado:
-        st.warning("⚠️ Acesso restrito. Faça login para visualizar o dashboard.")
-        st.stop()
-
-    st.title("🏠 Dashboard de Preços de Imóveis")
-    painel = st.sidebar.selectbox("Escolha o painel", ["Mercado Imobiliário", "Indicadores Econômicos", "Projeções de Crescimento"])
-
-    if painel == "Mercado Imobiliário":
-        sub_tipo = st.sidebar.selectbox("Tipo de mercado", list(cidades_arquivos.keys()))
-        cidade = st.sidebar.selectbox("Cidade", list(cidades_arquivos[sub_tipo].keys()))
-        caminho = os.path.join(DATA_DIR, cidades_arquivos[sub_tipo][cidade])
-        try:
-            df = carregar_dados(caminho)
-            metricas = [col for col in df.columns if any(m in col.lower() for m in ['preço', 'var.', 'número'])]
-            metrica = st.sidebar.selectbox("Métrica", metricas)
-            fig = gerar_grafico_imobiliario(df, cidade, metrica)
-            st.plotly_chart(fig, use_container_width=True)
-            with st.expander("Ver dados brutos"):
-                st.dataframe(df)
-        except Exception as e:
-            st.error(f"Erro: {e}")
-
-    elif painel == "Indicadores Econômicos":
-        caminho = os.path.join(DATA_DIR, "dados_banco_central.csv")
-        try:
-            df = carregar_dados(caminho)
-            indicador = st.sidebar.selectbox("Indicador", df['Indicador'].unique())
-            fig, df_filt = gerar_grafico_bcb(df, indicador)
-            st.plotly_chart(fig, use_container_width=True)
-            with st.expander("Ver dados brutos"):
-                st.dataframe(df_filt)
-        except Exception as e:
-            st.error(f"Erro: {e}")
-
-    elif painel == "Projeções de Crescimento":
-        painel_projecoes()
+    painel = st.sidebar.radio("Painel", ["Captura (RF01)", "Dashboard (RF02)", "Modelo (RF03)"], index=1)
+    if painel.startswith("Captura"):
+        painel_captura()
+    elif painel.startswith("Dashboard"):
+        painel_dashboard()
+    else:
+        painel_modelo()
 
 if __name__ == "__main__":
-    main()
+    if not os.path.exists(DB_PATH):
+        st.error(f"Banco não encontrado em {DB_PATH}. Rode a ETL primeiro.")
+    else:
+        main()

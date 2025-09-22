@@ -7,3 +7,4 @@ selenium
 webdriver-manager
 scikit-learn
 prophet
+statsmodels
