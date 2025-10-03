@@ -1,9 +1,10 @@
 # app.py — RF01, RF02, RF03 + RNFs (Prophet, ARIMA, RandomForest e XGBoost)
+# 💡 App Streamlit para visualizar e prever preços médios imobiliários
+# com base em dados SQLite e modelos salvos via joblib.
 
 import os
 import sqlite3
 from typing import Dict, List
-
 import numpy as np
 import pandas as pd
 import plotly.express as px
@@ -11,6 +12,7 @@ import streamlit as st
 import joblib
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
+# ----------------- CONFIG GERAL -----------------
 st.set_page_config(page_title="Preditor Imobiliário", layout="wide")
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -71,8 +73,7 @@ def painel_dashboard():
     if "Data" in df.columns:
         data_min, data_max = df["Data"].min(), df["Data"].max()
         d_ini, d_fim = st.sidebar.date_input(
-            "Período",
-            value=(data_min.to_pydatetime().date(), data_max.to_pydatetime().date())
+            "Período", value=(data_min.to_pydatetime().date(), data_max.to_pydatetime().date())
         )
         if d_ini and d_fim:
             df = df[(df["Data"] >= pd.to_datetime(d_ini)) & (df["Data"] <= pd.to_datetime(d_fim))]
@@ -90,6 +91,18 @@ def _avaliar(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float]:
     rmse = float(np.sqrt(mean_squared_error(y_true, y_pred)))
     r2 = r2_score(y_true, y_pred)
     return {"MAE": float(mae), "RMSE": float(rmse), "R2": float(r2)}
+
+def _extrair_modelo(obj):
+    """
+    Garante que retornamos o modelo treinado correto, mesmo se vier dentro de tupla ou lista.
+    Retorna o primeiro objeto que tem método predict() ou forecast().
+    """
+    if isinstance(obj, (list, tuple)):
+        for item in obj:
+            if hasattr(item, "predict") or hasattr(item, "forecast"):
+                return item
+        return obj[0]
+    return obj
 
 def painel_modelo():
     st.subheader("🧠 Modelo preditivo (RF03)")
@@ -124,100 +137,118 @@ def painel_modelo():
 
     chave = f"{tabela}_{cidade.lower()}"
     if chave not in modelos:
-        st.error(f"Não há modelo treinado para {chave} no all_models.joblib.")
+        st.error(f"Não há modelo treinado para {chave}.")
         return
 
     entry = modelos[chave]
 
-    if isinstance(entry, dict):
-        modelo_opcoes = [k for k in entry.keys() if k in ["prophet_model", "arima_model", "rf_model", "xgb_model"]]
-        if not modelo_opcoes:
-            st.error("Nenhum dos modelos suportados (Prophet, ARIMA, RF, XGBoost) encontrado.")
-            return
-        escolha = st.selectbox("Escolha o modelo salvo:", modelo_opcoes)
-        modelo = entry[escolha]
-    else:
-        modelo = entry
-        escolha = "rf_model"
+    possiveis = [
+        "prophet_model", "arima_model", "rf_model", "xgb_model",
+        "prophet_models", "arima_models", "rf_models", "xgb_models"
+    ]
+    modelo_opcoes = [k for k in entry.keys() if k in possiveis]
+    if not modelo_opcoes:
+        st.error("Nenhum dos modelos suportados encontrado.")
+        return
+
+    nome_amigavel = {
+        "prophet_model": "Prophet", "prophet_models": "Prophet",
+        "arima_model": "ARIMA", "arima_models": "ARIMA",
+        "rf_model": "Random Forest", "rf_models": "Random Forest",
+        "xgb_model": "XGBoost", "xgb_models": "XGBoost"
+    }
+
+    opcoes_display = [nome_amigavel[k] for k in modelo_opcoes]
+    escolha_display = st.selectbox("Escolha o modelo salvo:", opcoes_display)
+    escolha = [k for k, v in nome_amigavel.items() if v == escolha_display and k in modelo_opcoes][0]
+
+    modelo = _extrair_modelo(entry[escolha])
 
     df = df.dropna(subset=[alvo]).copy()
-
     hist_df = entry.get("historical_df", pd.DataFrame()).copy()
-    if not hist_df.empty and "Data" in hist_df.columns:
-        df_merged = pd.merge(df, hist_df.drop(columns=[PREC_COL], errors="ignore"),
-                             on="Data", how="left")
-    else:
-        df_merged = df.copy()
+
+    # Prepara regressors do Prophet
+    regressors = [c for c in hist_df.columns if c not in ["y", "ds", "Data", alvo]]
+    df_merged = pd.merge(df, hist_df.drop(columns=[PREC_COL], errors="ignore"), on="Data", how="left") if not hist_df.empty else df.copy()
 
     prever_futuro = st.checkbox("🔮 Prever até 2027", value=False)
     last_date = df["Data"].max()
-    future_dates = pd.date_range(start=last_date + pd.DateOffset(months=1),
-                                 end="2027-12-01", freq="MS")
+    future_dates = pd.date_range(start=last_date + pd.DateOffset(months=1), end="2027-12-01", freq="MS")
 
     try:
-        # --------- Parte 1: Histórico ----------
-        if escolha == "prophet_model":
-            regressors = [c for c in hist_df.columns if c not in ["y", "ds"]]
+        # -------- Histórico
+        if escolha.startswith("prophet"):
             future_df = pd.DataFrame({"ds": df_merged["Data"]})
             for r in regressors:
-                future_df[r] = df_merged[r].fillna(method="ffill").fillna(0).values if r in df_merged else 0
+                if r not in df_merged.columns:
+                    df_merged[r] = 0
+                future_df[r] = df_merged[r].fillna(0)
             forecast = modelo.predict(future_df)
             df_hist = df.copy()
             df_hist["Previsto"] = forecast["yhat"].values
 
-        elif escolha == "arima_model":
-            diff = entry.get("arima_diff", 0)
-            last_val = entry.get("arima_last_val", None)
-            forecast = modelo.forecast(steps=len(df_merged))
-            if diff and last_val is not None:
-                forecast = np.r_[last_val, forecast].cumsum()[1:]
+        elif escolha.startswith("arima"):
+            if hasattr(modelo, "forecast"):
+                forecast = modelo.forecast(steps=len(df_merged))
+                if isinstance(forecast, tuple):
+                    forecast = forecast[0]
+            elif hasattr(modelo, "predict"):
+                forecast = modelo.predict(len(df_merged))
+            else:
+                raise AttributeError("Modelo ARIMA não possui método forecast/predict.")
             df_hist = df.copy()
-            df_hist["Previsto"] = np.array(forecast)
+            df_hist["Previsto"] = forecast
 
-        elif escolha in ["rf_model", "xgb_model"]:
-            features = entry.get("rf_features" if escolha=="rf_model" else "xgb_features", [])
-            imputer = entry.get("rf_imputer" if escolha=="rf_model" else "xgb_imputer", None)
-            scaler = entry.get("rf_scaler" if escolha=="rf_model" else "xgb_scaler", None)
+        else:
+            is_rf = "rf" in escolha
+            features = entry.get("rf_features" if is_rf else "xgb_features", [])
+            imputer = entry.get("rf_imputer" if is_rf else "xgb_imputer", None)
+            scaler = entry.get("rf_scaler" if is_rf else "xgb_scaler", None)
             for f in features:
-                if f not in df_merged.columns: df_merged[f] = 0
+                if f not in df_merged.columns:
+                    df_merged[f] = 0
             X = df_merged[features].fillna(0)
             if imputer: X = imputer.transform(X)
             if scaler: X = scaler.transform(X)
-            df_hist = df.copy()
-            df_hist["Previsto"] = modelo.predict(X)
+            if hasattr(modelo, "predict"):
+                df_hist = df.copy()
+                df_hist["Previsto"] = modelo.predict(X)
+            else:
+                raise AttributeError("Modelo não possui método predict.")
 
-        # --------- Parte 2: Futuro (opcional) ----------
+        # -------- Futuro
         df_future = pd.DataFrame()
         if prever_futuro:
-            if escolha == "prophet_model":
+            if escolha.startswith("prophet"):
                 extra_future = modelo.make_future_dataframe(periods=len(future_dates), freq="MS")
-                for r in regressors: extra_future[r] = 0
+                for r in regressors:
+                    if r not in extra_future.columns:
+                        extra_future[r] = 0
                 forecast_future = modelo.predict(extra_future)
                 df_future = forecast_future[["ds", "yhat"]].rename(columns={"ds": "Data", "yhat": "Previsto"})
                 df_future = df_future[df_future["Data"] > df["Data"].max()]
-
-            elif escolha == "arima_model":
-                future_forecast = modelo.forecast(steps=len(future_dates))
-                if diff and last_val is not None:
-                    future_forecast = np.r_[last_val, future_forecast].cumsum()[1:]
+            elif escolha.startswith("arima"):
+                steps = len(future_dates)
+                future_forecast = modelo.forecast(steps=steps) if hasattr(modelo, "forecast") else modelo.predict(steps)
+                if isinstance(future_forecast, tuple):
+                    future_forecast = future_forecast[0]
                 df_future = pd.DataFrame({"Data": future_dates, "Previsto": future_forecast})
-
-            else:  # RF e XGB
+            else:
                 df_future = pd.DataFrame({"Data": future_dates})
-                for f in features: df_future[f] = 0
+                for f in features:
+                    df_future[f] = 0
                 X_future = df_future[features]
                 if imputer: X_future = imputer.transform(X_future)
                 if scaler: X_future = scaler.transform(X_future)
                 df_future["Previsto"] = modelo.predict(X_future)
 
-        # Concatena: dados reais + previsões futuras
-        df_plot = pd.concat([df, df_future], ignore_index=True)
+        df_plot = pd.concat([df_hist, df_future], ignore_index=True)
 
     except Exception as e:
         st.error(f"Erro ao rodar previsão: {e}")
         return
 
-    # ---------- Métricas só no histórico ----------
+    # ---------- Métricas
     y = df[alvo].astype(float).values
     y_pred_hist = df_hist["Previsto"].values
     if len(y) == len(y_pred_hist):
@@ -229,16 +260,14 @@ def painel_modelo():
     else:
         st.warning("⚠️ Histórico previsto e real têm tamanhos diferentes — métricas ignoradas.")
 
-    # ---------- Plot ----------
-    fig = px.line(df_plot, x="Data",
-                  y=[alvo] if df_future.empty else [alvo, "Previsto"],
-                  title=f"{escolha} — {cidade}", markers=True)
+    fig = px.line(df_plot, x="Data", y=[alvo, "Previsto"], title=f"{escolha_display} — {cidade}", markers=True)
     st.plotly_chart(fig, use_container_width=True)
 
     with st.expander("📋 Ver tabela de previsões"):
-        st.dataframe(df_plot[["Data", alvo, "Previsto"]] if alvo in df_plot else df_plot)
+        cols = [c for c in ["Data", alvo, "Previsto"] if c in df_plot.columns]
+        st.dataframe(df_plot[cols])
 
-# ----------------- LAYOUT -----------------
+# ----------------- MAIN -----------------
 def main():
     st.title("🏠 Preditor Imobiliário")
     st.caption("Atende RF01, RF02, RF03 + RNF01..RNF04. Base: db/warehouse.db (ETL).")
