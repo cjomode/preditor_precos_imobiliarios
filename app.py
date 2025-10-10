@@ -164,9 +164,32 @@ def painel_modelo():
     st.plotly_chart(fig, use_container_width=True)
 
 # ------------------------------------------------------------
+# 🔐 Página de Login Simples
+# ------------------------------------------------------------
+def login_page():
+    st.title("🔒 Login - Preditor Imobiliário")
+    st.write("Por favor, insira suas credenciais para acessar o sistema.")
+    usuario = st.text_input("Usuário:")
+    senha = st.text_input("Senha:", type="password")
+
+    if st.button("Entrar"):
+        if usuario == "admin" and senha == "admin":
+            st.session_state["autenticado"] = True
+            st.success("✅ Login realizado com sucesso!")
+            st.experimental_rerun()
+        else:
+            st.error("❌ Usuário ou senha incorretos.")
+
+# ------------------------------------------------------------
 # 🚀 Layout principal
 # ------------------------------------------------------------
 def main():
+    # Verificação de login
+    if "autenticado" not in st.session_state or not st.session_state["autenticado"]:
+        login_page()
+        return
+
+    # Interface principal (mantida original)
     st.title("🏠 Preditor Imobiliário")
     st.caption("Dashboard de Análise e Previsão de Preços de Imóveis")
 
