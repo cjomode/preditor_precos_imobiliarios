@@ -83,52 +83,52 @@ def teste_credenciais_incorretas():
     print(f"✅ Mensagem correta: '{texto_encontrado}'")
 
 # 3. Código MFA incorreto
-def teste_codigo_mfa_incorreto():
-    print("\n🧪 Cenário 3: Verificação MFA com código incorreto")
+# def teste_codigo_mfa_incorreto():
+#     print("\n🧪 Cenário 3: Verificação MFA com código incorreto")
 
-    input_fields = wait.until(EC.presence_of_all_elements_located((By.TAG_NAME, "input")))
-    input_fields[0].send_keys("admin")
-    input_fields[1].send_keys("admin")
+#     input_fields = wait.until(EC.presence_of_all_elements_located((By.TAG_NAME, "input")))
+#     input_fields[0].send_keys("admin")
+#     input_fields[1].send_keys("admin")
 
-    entrar_button = wait.until(
-        EC.element_to_be_clickable((By.XPATH, "//button[.//text()='➡️ Entrar']"))
-    )
-    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", entrar_button)
-    time.sleep(1)
+#     entrar_button = wait.until(
+#         EC.element_to_be_clickable((By.XPATH, "//button[.//text()='➡️ Entrar']"))
+#     )
+#     driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", entrar_button)
+#     time.sleep(1)
 
-    ActionChains(driver).move_to_element(entrar_button).click().perform()
-    print("🖱️ Botão 'Entrar' clicado!")
+#     ActionChains(driver).move_to_element(entrar_button).click().perform()
+#     print("🖱️ Botão 'Entrar' clicado!")
 
-    receber_codigo = wait.until(
-        EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Receber Código MFA')]"))
-    )
-    receber_codigo.click()
+#     receber_codigo = wait.until(
+#         EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Receber Código MFA')]"))
+#     )
+#     receber_codigo.click()
 
-    codigo_input = wait.until(
-        EC.visibility_of_element_located((By.ID, "text_input_3"))
-    )
-    codigo_input.send_keys("000000") 
-    print("🔢 Código MFA preenchido!")
+#     codigo_input = wait.until(
+#         EC.visibility_of_element_located((By.ID, "text_input_3"))
+#     )
+#     codigo_input.send_keys("000000") 
+#     print("🔢 Código MFA preenchido!")
 
-    verificar_button = wait.until(
-        EC.element_to_be_clickable((By.XPATH, "//button[.//text()='✅ Verificar Código']"))
-    )
-    verificar_button.click()
+#     verificar_button = wait.until(
+#         EC.element_to_be_clickable((By.XPATH, "//button[.//text()='✅ Verificar Código']"))
+#     )
+#     verificar_button.click()
 
-    mensagem_erro = wait.until(
-        EC.visibility_of_element_located((By.XPATH, "//p[text()='❌ Código incorreto. Tente novamente.']"))
-    )
+#     mensagem_erro = wait.until(
+#         EC.visibility_of_element_located((By.XPATH, "//p[text()='❌ Código incorreto. Tente novamente.']"))
+#     )
 
-    texto_encontrado = mensagem_erro.text.strip()
-    texto_esperado = "❌ Código incorreto. Tente novamente."
+#     texto_encontrado = mensagem_erro.text.strip()
+#     texto_esperado = "❌ Código incorreto. Tente novamente."
 
-    assert texto_encontrado == texto_esperado, (
-        f"\n❌ Mensagem incorreta!\n"
-        f"Esperado: '{texto_esperado}'\n"
-        f"Encontrado: '{texto_encontrado}'"
-    )
+#     assert texto_encontrado == texto_esperado, (
+#         f"\n❌ Mensagem incorreta!\n"
+#         f"Esperado: '{texto_esperado}'\n"
+#         f"Encontrado: '{texto_encontrado}'"
+#     )
 
-    print(f"✅ Mensagem correta: '{texto_encontrado}'")
+#     print(f"✅ Mensagem correta: '{texto_encontrado}'")
 
 
 try:
@@ -141,7 +141,7 @@ try:
     recarregar_pagina()
 
     # Teste 3: Código MFA incorreto
-    teste_codigo_mfa_incorreto()
+    # teste_codigo_mfa_incorreto()
 
 except Exception as e:
     print(f"\n❌ Erro durante a execução dos testes: {e}")

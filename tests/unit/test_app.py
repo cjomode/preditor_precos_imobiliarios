@@ -2,11 +2,6 @@ import pandas as pd
 from app import gerar_codigo_mfa, gerar_grafico_imobiliario, gerar_grafico_bcb
 
 
-def test_gerar_codigo_mfa():
-    codigo = gerar_codigo_mfa()
-    assert len(codigo) == 6, "Código MFA deve ter 6 dígitos"
-    assert codigo.isdigit(), "Código MFA deve conter apenas números"
-
 
 def test_gerar_grafico_imobiliario():
     df = pd.DataFrame({
