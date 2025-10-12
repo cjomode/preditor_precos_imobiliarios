@@ -27,7 +27,7 @@ def teste_campos_vazios():
     print("\n🧪 Cenário 1: Login com campos vazios")
 
     entrar_button = wait.until(
-        EC.element_to_be_clickable((By.XPATH, "//button[.//text()='➡️ Entrar']"))
+        EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Entrar')]"))
     )
     driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", entrar_button)
     time.sleep(1)
@@ -36,18 +36,12 @@ def teste_campos_vazios():
     print("🖱️ Botão 'Entrar' clicado!")
 
     mensagem_erro = wait.until(
-        EC.visibility_of_element_located((By.XPATH, "//p[text()='❌ Usuário ou senha inválidos.']"))
+        EC.visibility_of_element_located((By.XPATH, "//*[contains(text(), 'Usuário ou senha incorretos')]"))
     )
 
     texto_encontrado = mensagem_erro.text.strip()
-    texto_esperado = "❌ Usuário ou senha inválidos."
-
-    assert texto_encontrado == texto_esperado, (
-        f"\n❌ Mensagem incorreta!\n"
-        f"Esperado: '{texto_esperado}'\n"
-        f"Encontrado: '{texto_encontrado}'"
-    )
-
+    texto_esperado = "❌ Usuário ou senha incorretos."
+    assert texto_esperado in texto_encontrado, "❌ Mensagem incorreta!"
     print(f"✅ Mensagem correta: '{texto_encontrado}'")
 
 # 2. Campos de login e senha com dados inválidos
@@ -59,7 +53,7 @@ def teste_credenciais_incorretas():
     input_fields[1].send_keys("teste")
 
     entrar_button = wait.until(
-        EC.element_to_be_clickable((By.XPATH, "//button[.//text()='➡️ Entrar']"))
+        EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Entrar')]"))
     )
     driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", entrar_button)
     time.sleep(1)
@@ -68,68 +62,61 @@ def teste_credenciais_incorretas():
     print("🖱️ Botão 'Entrar' clicado!")
 
     mensagem_erro = wait.until(
-        EC.visibility_of_element_located((By.XPATH, "//p[text()='❌ Usuário ou senha inválidos.']"))
+        EC.visibility_of_element_located((By.XPATH, "//*[contains(text(), 'Usuário ou senha incorretos')]"))
     )
 
     texto_encontrado = mensagem_erro.text.strip()
-    texto_esperado = "❌ Usuário ou senha inválidos."
-
-    assert texto_encontrado == texto_esperado, (
-        f"\n❌ Mensagem incorreta!\n"
-        f"Esperado: '{texto_esperado}'\n"
-        f"Encontrado: '{texto_encontrado}'"
-    )
-
+    texto_esperado = "❌ Usuário ou senha incorretos."
+    assert texto_esperado in texto_encontrado, "❌ Mensagem incorreta!"
     print(f"✅ Mensagem correta: '{texto_encontrado}'")
 
-# 3. Código MFA incorreto
-# def teste_codigo_mfa_incorreto():
-#     print("\n🧪 Cenário 3: Verificação MFA com código incorreto")
+# 3. Apenas campo de usuário preenchido 
+def teste_apenas_usuario():
+    print("\n🧪 Cenário 3: Login apenas com o campo 'Usuário' preenchido")
 
-#     input_fields = wait.until(EC.presence_of_all_elements_located((By.TAG_NAME, "input")))
-#     input_fields[0].send_keys("admin")
-#     input_fields[1].send_keys("admin")
+    input_fields = wait.until(EC.presence_of_all_elements_located((By.TAG_NAME, "input")))
+    input_fields[0].send_keys("admin")
+    input_fields[1].clear()
 
-#     entrar_button = wait.until(
-#         EC.element_to_be_clickable((By.XPATH, "//button[.//text()='➡️ Entrar']"))
-#     )
-#     driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", entrar_button)
-#     time.sleep(1)
+    entrar_button = wait.until(
+        EC.element_to_be_clickable((By.XPATH, "(//button[contains(., 'Entrar')])[1]"))
+    )
+    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", entrar_button)
+    time.sleep(1)
+    ActionChains(driver).move_to_element(entrar_button).click().perform()
 
-#     ActionChains(driver).move_to_element(entrar_button).click().perform()
-#     print("🖱️ Botão 'Entrar' clicado!")
+    mensagem_erro = wait.until(
+        EC.visibility_of_element_located((By.XPATH, "//p[contains(text(), '❌ Usuário ou senha incorretos.')]"))
+    )
 
-#     receber_codigo = wait.until(
-#         EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Receber Código MFA')]"))
-#     )
-#     receber_codigo.click()
+    texto_encontrado = mensagem_erro.text.strip()
+    assert texto_encontrado == "❌ Usuário ou senha incorretos."
+    print("✅ Mensagem de erro exibida corretamente (usuário sem senha).")
 
-#     codigo_input = wait.until(
-#         EC.visibility_of_element_located((By.ID, "text_input_3"))
-#     )
-#     codigo_input.send_keys("000000") 
-#     print("🔢 Código MFA preenchido!")
 
-#     verificar_button = wait.until(
-#         EC.element_to_be_clickable((By.XPATH, "//button[.//text()='✅ Verificar Código']"))
-#     )
-#     verificar_button.click()
 
-#     mensagem_erro = wait.until(
-#         EC.visibility_of_element_located((By.XPATH, "//p[text()='❌ Código incorreto. Tente novamente.']"))
-#     )
+# 4. Apenas campo de senha preenchido
+def teste_apenas_senha():
+    print("\n🧪 Cenário 4: Login apenas com o campo 'Senha' preenchido")
 
-#     texto_encontrado = mensagem_erro.text.strip()
-#     texto_esperado = "❌ Código incorreto. Tente novamente."
+    input_fields = wait.until(EC.presence_of_all_elements_located((By.TAG_NAME, "input")))
+    input_fields[0].clear()
+    input_fields[1].send_keys("admin")
 
-#     assert texto_encontrado == texto_esperado, (
-#         f"\n❌ Mensagem incorreta!\n"
-#         f"Esperado: '{texto_esperado}'\n"
-#         f"Encontrado: '{texto_encontrado}'"
-#     )
+    entrar_button = wait.until(
+        EC.element_to_be_clickable((By.XPATH, "(//button[contains(., 'Entrar')])[1]"))
+    )
+    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", entrar_button)
+    time.sleep(1)
+    ActionChains(driver).move_to_element(entrar_button).click().perform()
 
-#     print(f"✅ Mensagem correta: '{texto_encontrado}'")
+    mensagem_erro = wait.until(
+        EC.visibility_of_element_located((By.XPATH, "//p[contains(text(), '❌ Usuário ou senha incorretos.')]"))
+    )
 
+    texto_encontrado = mensagem_erro.text.strip()
+    assert texto_encontrado == "❌ Usuário ou senha incorretos."
+    print("✅ Mensagem de erro exibida corretamente (senha sem usuário).")
 
 try:
     # Teste 1: Campos vazios
@@ -140,8 +127,13 @@ try:
     teste_credenciais_incorretas()
     recarregar_pagina()
 
-    # Teste 3: Código MFA incorreto
-    # teste_codigo_mfa_incorreto()
+    # Teste 3: Apenas campo de usuário preenchido
+    teste_apenas_usuario()
+    recarregar_pagina()
+    
+    # Teste 4: Apenas campo de senha preenchida
+    teste_apenas_senha()
+    recarregar_pagina()
 
 except Exception as e:
     print(f"\n❌ Erro durante a execução dos testes: {e}")

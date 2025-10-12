@@ -30,74 +30,15 @@ try:
     ActionChains(driver).move_to_element(entrar_button).click().perform()
     print("🖱️ Botão 'Entrar' clicado!")
 
-    # print("⏳ Aguardando aparecer o botão 'Receber Código MFA'...")
-    # mfa_button = wait.until(
-    #     EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Receber Código MFA')]"))
-    # )
-    # driver.execute_script("arguments[0].scrollIntoView(true);", mfa_button)
-    # time.sleep(1)
-    # ActionChains(driver).move_to_element(mfa_button).click().perform()
-    # print("📨 Botão 'Receber Código MFA' clicado!")
-
-    # print("⏳ Aguardando o código MFA ser exibido...")
-    # codigo_mfa = None
-
-    # for _ in range(5):
-    #     try:
-    #         codigo_element = wait.until(
-    #             EC.presence_of_element_located((By.XPATH, "//h3[contains(text(), 'Seu código é:')]/code"))
-    #         )
-    #         codigo_mfa = codigo_element.text.strip()
-    #         if codigo_mfa:
-    #             print(f"🔐 Código MFA capturado: {codigo_mfa}")
-    #             break
-    #     except:
-    #         time.sleep(1)
-    # else:
-    #     raise Exception("❌ Tempo esgotado: Código MFA não foi encontrado!")
-
-    # codigo_input = wait.until(
-    #     EC.visibility_of_element_located((By.ID, "text_input_3"))
-    # )
-    # codigo_input.send_keys(codigo_mfa)
-    # print("🔢 Código MFA preenchido!")
-
-
-    # print("⏳ Aguardando o botão 'Verificar Código' ficar clicável...")
-
-    # verificar_button = wait.until(
-    #     EC.element_to_be_clickable((By.XPATH, "//button[.//text()='✅ Verificar Código']"))
-    # )
-
-    # print("🖱️ Botão localizado. Indo até ele...")
-    # driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", verificar_button)
-    # time.sleep(1)
-
-    # print("🖱️ Tentando clicar no botão...")
-    # try:
-    #     # Tentativa 1: Clique normal com ActionChains
-    #     ActionChains(driver).move_to_element(verificar_button).click().perform()
-    # except Exception as e:
-    #     print("⚠️ Clique normal falhou. Usando clique via JavaScript...")
-    #     # Tentativa 2: Clique via JavaScript
-    #     driver.execute_script("arguments[0].click();", verificar_button)
-
-    # print("✅ Código verificado com sucesso!")
-    # time.sleep(2) 
-    
-    # print("🔍 Aguardando mensagem de sucesso...")
-    # mensagem_sucesso = wait.until(
-    #     EC.visibility_of_element_located((By.XPATH,
-    #         "//div[@class='stAlert']//div[normalize-space()='✅ Código verificado com sucesso!']"))
-    # )
-
-    # assert mensagem_sucesso.is_displayed(), "❌ Mensagem de sucesso NÃO foi exibida!"
-    # print("✅ Mensagem validada com sucesso!")
+    success_message = wait.until(
+        EC.presence_of_element_located((By.XPATH, "//*[contains(text(), 'Login realizado com sucesso')]"))
+    )
+    assert success_message.is_displayed(), "Mensagem de sucesso não encontrada!"
+    print("✅ Login realizado com sucesso!")
 
 except Exception as e:
-    print("❌ Ocorreu um erro:", e)
+    print("❌ Erro durante o teste:", e)
     raise
-
 finally:
-    time.sleep(5)
+    time.sleep(3)
     driver.quit()
