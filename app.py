@@ -6,6 +6,7 @@
 # 3. Previsões inteligentes (Prophet e SARIMA)
 # ------------------------------------------------------------
 
+import time
 import os
 import sqlite3
 import joblib
@@ -36,8 +37,18 @@ def _sql(query, params=None):
 
 @st.cache_data(show_spinner=False)
 def listar_cidades(tabela):
-    df = _sql(f"SELECT DISTINCT Cidade FROM {tabela} ORDER BY Cidade;")
-    return df["Cidade"].tolist()
+    try:
+        df = _sql(f"SELECT DISTINCT Cidade FROM {tabela} ORDER BY Cidade;")
+        return df["Cidade"].tolist()
+    except pd.errors.DatabaseError as e:
+        if "no such table" in str(e):
+            st.warning("⚠️ O banco de dados ainda não foi carregado. "
+                       "Por favor, clique em **📥 Atualização de Dados → Executar atualização agora** primeiro.")
+            return []  # Evita que o app quebre
+        else:
+            st.error(f"❌ Erro inesperado ao acessar o banco: {e}")
+            return []
+
 
 @st.cache_data(show_spinner=False)
 def carregar_cidade(tabela, cidade):
@@ -121,11 +132,47 @@ def painel_modelo():
         st.error(f"Erro ao carregar modelos: {e}")
         return
 
-    tipo_opcao = st.selectbox("Tipo de mercado:", list(resultados.keys()))
-    modelo_opcao = st.selectbox("Modelo:", list(resultados[tipo_opcao].keys()))
-    cidades_disp = list(resultados[tipo_opcao][modelo_opcao].keys())
-    cidade = st.selectbox("Cidade:", cidades_disp)
+    # -------------------------
+    # 🔹 Tipo de mercado
+    nomes_mercado = {
+        "locacao": "Locação",
+        "vendas": "Vendas"
+    }
+    tipos_disponiveis = list(resultados.keys())
+    tipos_legiveis = {t: nomes_mercado.get(t, t.replace("_", " ").capitalize()) for t in tipos_disponiveis}
 
+    tipo_legivel = st.selectbox("Tipo de mercado:", list(tipos_legiveis.values()), index=0)
+    tipo_opcao = [k for k, v in tipos_legiveis.items() if v == tipo_legivel][0]
+
+    # -------------------------
+    # 🔹 Modelo
+    modelos_disponiveis = list(resultados[tipo_opcao].keys())
+    modelos_legiveis = {m: m.replace("_", " ").upper() for m in modelos_disponiveis}
+
+    modelo_legivel = st.selectbox("Modelo:", list(modelos_legiveis.values()), index=0)
+    modelo_opcao = [k for k, v in modelos_legiveis.items() if v == modelo_legivel][0]
+
+    # -------------------------
+    # 🔹 Cidade (capitais do Nordeste)
+    nomes_cidades = {
+        "Aracaju": "Aracaju (SE)",
+        "Fortaleza": "Fortaleza (CE)",
+        "Joao_Pessoa": "João Pessoa (PB)",
+        "Teresina": "Teresina (PI)",
+        "Maceio": "Maceió (AL)",
+        "Natal": "Natal (RN)",
+        "Recife": "Recife (PE)",
+        "Salvador": "Salvador (BA)",
+        "Sao_Luis": "São Luís (MA)"
+    }
+    cidades_disp = list(resultados[tipo_opcao][modelo_opcao].keys())
+    cidades_legiveis = {c: nomes_cidades.get(c, c.replace("_", " ").title()) for c in cidades_disp}
+
+    cidade_legivel = st.selectbox("Cidade:", list(cidades_legiveis.values()), index=0)
+    cidade = [k for k, v in cidades_legiveis.items() if v == cidade_legivel][0]
+
+    # -------------------------
+    # 🔹 Dados e métricas
     dados = resultados[tipo_opcao][modelo_opcao][cidade]
     if modelo_opcao in dados:
         dados = dados[modelo_opcao]
@@ -135,12 +182,14 @@ def painel_modelo():
         return
 
     met = dados["metrics"]
-    st.subheader(f"📏 Desempenho do Modelo {modelo_opcao.upper()} — {cidade}")
+    st.subheader(f"📏 Desempenho do Modelo {modelo_opcao.upper()} — {cidade_legivel}")
     c1, c2, c3 = st.columns(3)
     c1.metric("MAE", f"{met['MAE']:.2f}")
     c2.metric("RMSE", f"{met['RMSE']:.2f}")
     c3.metric("R²", f"{met['R2']:.2f}")
 
+    # -------------------------
+    # 🔹 Dados reais e previsão
     tabela = "locacao" if tipo_opcao == "locacao" else "vendas"
     df_real = carregar_cidade(tabela, cidade)
     if df_real.empty:
@@ -159,8 +208,8 @@ def painel_modelo():
         df_plot = pd.concat([df_plot, y_pred_future.rename("Futuro")], axis=0)
 
     fig = px.line(df_plot, x=df_plot.index, y=df_plot.columns,
-                  title=f"📉 {cidade} — {modelo_opcao.upper()}",
-                  markers=True)
+                title=f"📉 {cidade_legivel} — {modelo_opcao.upper()}",
+                markers=True)
     st.plotly_chart(fig, use_container_width=True)
 
 # ------------------------------------------------------------
@@ -169,17 +218,36 @@ def painel_modelo():
 def login_page():
     st.title("🔒 Login - Preditor Imobiliário")
     st.write("Por favor, insira suas credenciais para acessar o sistema.")
-    usuario = st.text_input("Usuário:")
-    senha = st.text_input("Senha:", type="password")
 
-    if st.button("Entrar"):
+    st.markdown("""
+    <style>
+    div[data-testid="stFormSubmitButton"] > button {
+    background-color: #28a745 !important; 
+    color: white !important;
+    border: none !important;
+    border-radius: 8px !important;
+    font-weight: 700 !important;
+    transition: 0.2s ease-in-out !important;
+    }
+    div[data-testid="stFormSubmitButton"] > button:hover {
+    background-color: #218838 !important; 
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    with st.form("login_form"):
+        usuario = st.text_input("Usuário:")
+        senha = st.text_input("Senha:", type="password")
+        enviar = st.form_submit_button("Entrar")
+
+    if enviar:
         if usuario == "admin" and senha == "admin":
             st.session_state["autenticado"] = True
             st.success("✅ Login realizado com sucesso!")
-            st.experimental_rerun()
+            time.sleep(2)
+            st.rerun()
         else:
             st.error("❌ Usuário ou senha incorretos.")
-
 # ------------------------------------------------------------
 # 🚀 Layout principal
 # ------------------------------------------------------------
