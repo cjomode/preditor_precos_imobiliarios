@@ -6,7 +6,7 @@
 ![Plotly](https://img.shields.io/badge/Charts-Plotly-lightgrey?logo=plotly)
 ![Terraform](https://img.shields.io/badge/Terraform-Used-5f43e9?logo=terraform&logoColor=white)
 ![AWS](https://img.shields.io/badge/AWS-EC2-informational?logo=amazon-aws&logoColor=white&color=232F3E)
-![CI/CD](https://img.shields.io/github/actions/workflow/status/cjomode/preditor_precos_imobiliarios/deploy.yml?branch=<branch>&label=CI%2FCD&logo=github)
+![CI/CD](https://img.shields.io/github/actions/workflow/status/cjomode/preditor_precos_imobiliarios/deploy.yml?branch=main&label=CI%2FCD&logo=github)
 ![MFA](https://img.shields.io/badge/🔐_MFA-Ativado-success)
 ![Pytest](https://img.shields.io/badge/Testes-Pytest-yellow?logo=pytest)
 ![Selenium](https://img.shields.io/badge/Testes%20UI-Selenium-43B02A?logo=selenium&logoColor=white)
@@ -148,4 +148,5 @@ Este projeto está licenciado sob os termos da Licença MIT.
 Isso significa que você pode usar, copiar, modificar, mesclar, publicar, distribuir e até vender o software, desde que mantenha os créditos originais. 💖
 
  #### “Com liberdade vem responsabilidade.” – Use com sabedoria! 😄
+
 
