@@ -221,17 +221,55 @@ def login_page():
 
     st.markdown("""
     <style>
+    footer {
+        visibility: hidden !important;
+    }
     div[data-testid="stFormSubmitButton"] > button {
-    background-color: #28a745 !important; 
-    color: white !important;
-    border: none !important;
-    border-radius: 8px !important;
-    font-weight: 700 !important;
-    transition: 0.2s ease-in-out !important;
+        background-color: #28a745 !important; 
+        color: white !important;
+        border: none !important;
+        border-radius: 8px !important;
+        font-weight: 700 !important;
+        transition: 0.2s ease-in-out !important;
     }
     div[data-testid="stFormSubmitButton"] > button:hover {
-    background-color: #218838 !important; 
+        background-color: #218838 !important; 
     }
+    .stForm{
+        width: 65%;
+        margin: 0 auto;
+    }
+    .stForm > div:nth-child(1){
+        height: 225px;
+    }
+    .stForm > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > label:nth-child(1) > div:nth-child(1) > p:nth-child(1),
+    .stForm > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(1) > label:nth-child(1) > div:nth-child(1) > p:nth-child(1) {
+        font-size: 19px !important;
+    }  
+    .stMainBlockContainer > div:nth-child(1) > div:nth-child(1) > div:nth-child(1),
+    .stMainBlockContainer > div:nth-child(1) > div:nth-child(1) > div:nth-child(2){
+        margin: 0 auto;
+    }
+    
+    .custom-message {
+        width: 65%;
+        margin: 10px auto;
+        padding: 1rem;
+        border-radius: 8px;
+    }
+
+    .success-message {
+        background-color: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+    }
+    
+    .error-message {
+        background-color: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+    }
+
     </style>
     """, unsafe_allow_html=True)
     
@@ -243,11 +281,17 @@ def login_page():
     if enviar:
         if usuario == "admin" and senha == "admin":
             st.session_state["autenticado"] = True
-            st.success("✅ Login realizado com sucesso!")
+            st.markdown(
+                '<div class="custom-message success-message">✅ Login realizado com sucesso!</div>', 
+                unsafe_allow_html=True
+            )
             time.sleep(2)
             st.rerun()
         else:
-            st.error("❌ Usuário ou senha incorretos.")
+            st.markdown(
+                '<div class="custom-message error-message">❌ Usuário ou senha incorretos.</div>', 
+                unsafe_allow_html=True
+            )
 # ------------------------------------------------------------
 # 🚀 Layout principal
 # ------------------------------------------------------------
