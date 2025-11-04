@@ -1,323 +1,445 @@
-# 🏠 Preditor Imobiliário — Dashboard Interativo
-# ------------------------------------------------------------
-# App com 3 seções:
-# 1. Captura e atualização do banco (ETL)
-# 2. Visualização de dados reais (Dashboard)
-# 3. Previsões inteligentes (Prophet e SARIMA)
-# ------------------------------------------------------------
-
-import time
 import os
-import sqlite3
 import joblib
 import pandas as pd
-import numpy as np
 import plotly.express as px
 import streamlit as st
 
-# 🎨 Configuração inicial da página
-st.set_page_config(page_title="Preditor Imobiliário", layout="wide", page_icon="🏠")
+# ============================================================
+# 🎨 Configuração da página
+# ============================================================
+st.set_page_config(
+    page_title="Preditor Imobiliário",
+    layout="wide",
+    page_icon="🏠"
+)
 
-# 🧭 Caminhos
+# ============================================================
+# 🧭 Caminhos locais
+# ============================================================
 HERE = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(HERE, "db", "warehouse.db")
-JOBLIB_PATH = os.path.join(HERE, "modelos_finais_completos.joblib")
-PREC_COL = "Preço médio (R$/m²)Total"
-
-# ------------------------------------------------------------
-# ⚙️ Funções auxiliares
-# ------------------------------------------------------------
-def _connect():
-    return sqlite3.connect(DB_PATH, detect_types=sqlite3.PARSE_DECLTYPES)
-
-@st.cache_data(show_spinner=False)
-def _sql(query, params=None):
-    with _connect() as conn:
-        return pd.read_sql_query(query, conn, params=params)
-
-@st.cache_data(show_spinner=False)
-def listar_cidades(tabela):
-    try:
-        df = _sql(f"SELECT DISTINCT Cidade FROM {tabela} ORDER BY Cidade;")
-        return df["Cidade"].tolist()
-    except pd.errors.DatabaseError as e:
-        if "no such table" in str(e):
-            st.warning("⚠️ O banco de dados ainda não foi carregado. "
-                       "Por favor, clique em **📥 Atualização de Dados → Executar atualização agora** primeiro.")
-            return []  # Evita que o app quebre
-        else:
-            st.error(f"❌ Erro inesperado ao acessar o banco: {e}")
-            return []
+CSV_PATH = os.path.join(HERE, "csv_unico.csv")
+JOBLIB_PATH = os.path.join(HERE, "modelos_sarima.joblib")
 
 
-@st.cache_data(show_spinner=False)
-def carregar_cidade(tabela, cidade):
-    df = _sql(f"SELECT * FROM {tabela} WHERE Cidade = ? ORDER BY Data;", (cidade,))
-    if "Data" in df.columns:
-        df["Data"] = pd.to_datetime(df["Data"], errors="coerce")
-        df = df.dropna(subset=["Data"])
-    return df
+# ============================================================
+# 🔐 Tela de Login
+# ============================================================
+def mostrar_login():
+    # garante que a chave exista
+    if "auth" not in st.session_state:
+        st.session_state["auth"] = False
 
-# ------------------------------------------------------------
-# 🧾 Captura e Atualização de Dados
-# ------------------------------------------------------------
-def painel_captura():
-    st.header("📥 Atualização de Dados")
-    st.write("Conecte-se ao pipeline ETL e atualize automaticamente o banco de dados com os dados mais recentes.")
-    
-    if st.button("🚀 Executar atualização agora"):
-        try:
-            result = os.system("python script/etl_build_db.py")
-            if result == 0:
-                st.success("✅ Atualização concluída com sucesso!")
+    st.markdown("## 🏠 Preditor Imobiliário")
+    st.markdown("### 🔐 Acesso restrito")
+
+    # layout centralizado
+    col_esq, col_centro, col_dir = st.columns([1, 2, 1])
+    with col_centro:
+        st.markdown(
+            """
+            <div style="
+                padding: 2rem;
+                border-radius: 0.8rem;
+                background-color: #111827;
+                border: 1px solid #374151;
+                box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+            ">
+                <h3 style="margin-bottom: 0.5rem;">Login do painel</h3>
+                <p style="font-size: 0.9rem; color: #9CA3AF; margin-top: 0;">
+                    Acesse com suas credenciais administrativas.
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # form logo abaixo do card de texto
+        with st.form("login_form"):
+            usuario = st.text_input("Usuário")
+            senha = st.text_input("Senha", type="password")
+            entrar = st.form_submit_button("Entrar")
+
+        if entrar:
+            if usuario == "admin" and senha == "admin":
+                st.session_state["auth"] = True
+                st.success("Login realizado com sucesso! ✨")
+                st.rerun()
             else:
-                st.error("❌ Ocorreu um erro durante a atualização.")
-        except Exception as e:
-            st.error(f"Erro ao executar ETL: {e}")
-    else:
-        st.info("Clique no botão acima para rodar o script de atualização (ETL).")
+                st.error("Usuário ou senha inválidos.")
 
-# ------------------------------------------------------------
-# 📊 Visualização de Dados Reais
-# ------------------------------------------------------------
-def painel_dashboard():
-    st.header("📊 Visualização de Dados")
-    st.caption("Explore a evolução dos preços reais por cidade, direto do banco SQLite.")
 
-    tipo_map = {"Mercado de Locação": "locacao", "Mercado de Venda": "vendas"}
-    tipo_label = st.sidebar.radio("Selecione o mercado:", list(tipo_map.keys()))
-    tabela = tipo_map[tipo_label]
+# ============================================================
+# 🔎 Funções auxiliares de detecção de coluna
+# ============================================================
+def detectar_coluna(colunas, candidatos):
+    """
+    Tenta achar uma coluna que:
+    - seja exatamente igual a um dos candidatos (ignorando maiúsc/minúsc)
+    - OU contenha o texto candidato dentro.
+    Retorna o nome REAL da coluna encontrada, ou None.
+    """
+    lower_map = {c.lower(): c for c in colunas}
 
-    cidades = listar_cidades(tabela)
-    if not cidades:
-        st.warning("⚠️ Nenhuma cidade encontrada no banco.")
+    for cand in candidatos:
+        if cand.lower() in lower_map:
+            return lower_map[cand.lower()]
+
+    for cand in candidatos:
+        alvo = cand.lower()
+        for real in colunas:
+            if alvo in real.lower():
+                return real
+
+    return None
+
+
+def detectar_coluna_data(cols):
+    candidatos_data = [
+        "data", "dt", "date", "data_mes", "mes", "mes_referencia",
+        "periodo", "referencia", "competencia", "Data", "DATA", "Periodo",
+        "Data_Mes", "Mes"
+    ]
+    return detectar_coluna(cols, candidatos_data)
+
+
+def detectar_coluna_cidade(cols):
+    candidatos_cidade = [
+        "cidade", "municipio", "município", "City", "CIDADE", "localidade"
+    ]
+    return detectar_coluna(cols, candidatos_cidade)
+
+
+def detectar_coluna_tipo(cols):
+    candidatos_tipo = [
+        "tipo_mercado", "Tipo_Mercado", "segmento", "mercado",
+        "tipo", "Tipo", "TipoMercado", "TipoMercado_Nome"
+    ]
+    return detectar_coluna(cols, candidatos_tipo)
+
+
+def detectar_coluna_preco(cols):
+    """
+    Tenta achar a coluna de preço/m².
+    """
+    candidatos_preco_fixos = [
+        "Preco_m2",
+        "preco_m2",
+        "Preço médio (R$/m²) Total",
+        "Preço médio (R$/m²)Total",
+        "Preço_médio_m2",
+        "Preço_m2",
+        "valor_m2",
+        "valor_medio_m2",
+        "preco",
+        "preço",
+        "Numero_Indice_Total",
+        "numero_indice_total",
+        "Indice_Total",
+        "Indice",
+    ]
+    col = detectar_coluna(cols, candidatos_preco_fixos)
+    if col:
+        return col
+
+    for c in cols:
+        cl = c.lower()
+        if ("preco" in cl or "preço" in cl or "m²" in cl or "m2" in cl or
+                "indice" in cl or "índice" in cl):
+            return c
+
+    return None
+
+
+# ============================================================
+# 📥 Carregar dados históricos
+# ============================================================
+@st.cache_data(show_spinner=False)
+def carregar_dados_historicos():
+    """
+    Lê csv_unico.csv e devolve colunas padronizadas:
+    ['data', 'cidade', 'tipo_mercado', 'preco_m2']
+    """
+    if not os.path.exists(CSV_PATH):
+        st.error("❌ O arquivo 'csv_unico.csv' não foi encontrado na pasta do projeto.")
+        return pd.DataFrame()
+
+    try:
+        df = pd.read_csv(
+            CSV_PATH,
+            sep=None,
+            engine="python",
+            encoding="utf-8",
+        )
+    except UnicodeDecodeError:
+        df = pd.read_csv(
+            CSV_PATH,
+            sep=None,
+            engine="python",
+            encoding="latin-1",
+        )
+
+    df.columns = [c.strip().replace("\ufeff", "") for c in df.columns]
+
+    col_data = detectar_coluna_data(df.columns)
+    col_cidade = detectar_coluna_cidade(df.columns)
+    col_tipo = detectar_coluna_tipo(df.columns)
+    col_preco = detectar_coluna_preco(df.columns)
+
+    faltando = []
+    if col_data is None:
+        faltando.append("data (ex: Data / Periodo / Mes / Referencia)")
+    if col_cidade is None:
+        faltando.append("cidade (ex: Cidade / Municipio)")
+    if col_tipo is None:
+        faltando.append("tipo_mercado (ex: Tipo_Mercado / Mercado)")
+    if col_preco is None:
+        faltando.append("preco_m2 (preço médio m² / índice de preço)")
+
+    if faltando:
+        st.error("⚠ Não consegui mapear todas as colunas essenciais do CSV.")
+        st.write("O que ficou faltando identificar:", faltando)
+        st.write("Colunas que existem no CSV:", list(df.columns))
+        return pd.DataFrame()
+
+    df = df.rename(columns={
+        col_data: "data",
+        col_cidade: "cidade",
+        col_tipo: "tipo_mercado",
+        col_preco: "preco_m2"
+    })
+
+    df["data"] = pd.to_datetime(df["data"], errors="coerce", dayfirst=False)
+
+    if df["preco_m2"].dtype == object:
+        df["preco_m2"] = (
+            df["preco_m2"]
+            .astype(str)
+            .str.replace(".", "", regex=False)
+            .str.replace(",", ".", regex=False)
+        )
+    df["preco_m2"] = pd.to_numeric(df["preco_m2"], errors="coerce")
+
+    df = df.dropna(subset=["data", "cidade", "tipo_mercado", "preco_m2"])
+    df = df.sort_values(["cidade", "tipo_mercado", "data"]).reset_index(drop=True)
+
+    return df[["data", "cidade", "tipo_mercado", "preco_m2"]]
+
+
+# ============================================================
+# 🤖 Carregar previsões SARIMA
+# ============================================================
+@st.cache_resource(show_spinner=False)
+def carregar_snapshot_previsoes():
+    """
+    Espera um joblib com:
+      pacote["previsoes_futuras"]: df [data, cidade, tipo_mercado, preco_previsto]
+      pacote["historico_real"]: df [data, cidade, tipo_mercado, preco_real] (opcional)
+      pacote["info"]: dict com "ultima_data_historica"
+    """
+    if not os.path.exists(JOBLIB_PATH):
+        return None
+
+    try:
+        pacote = joblib.load(JOBLIB_PATH)
+    except Exception as e:
+        st.error(f"❌ Erro lendo o arquivo modelos_sarima.joblib: {e}")
+        return None
+
+    if "previsoes_futuras" in pacote and isinstance(pacote["previsoes_futuras"], pd.DataFrame):
+        pacote["previsoes_futuras"]["data"] = pd.to_datetime(
+            pacote["previsoes_futuras"]["data"], errors="coerce"
+        )
+
+    if "historico_real" in pacote and isinstance(pacote.get("historico_real"), pd.DataFrame):
+        pacote["historico_real"]["data"] = pd.to_datetime(
+            pacote["historico_real"]["data"], errors="coerce"
+        )
+
+    return pacote
+
+
+# ============================================================
+# 📊 Aba 1 - Visualização Histórica
+# ============================================================
+def painel_dashboard(df_hist):
+    st.header("📊 Visão Histórica do Mercado Imobiliário")
+    st.caption("Evolução do preço médio (R$/m²) ao longo do tempo, por cidade e tipo de mercado.")
+
+    if df_hist.empty:
+        st.warning("⚠ Ainda não consegui montar a base histórica. Veja avisos acima 👆.")
         return
 
-    cidade = st.sidebar.selectbox("Selecione a cidade:", cidades)
-    df = carregar_cidade(tabela, cidade)
+    cidades = sorted(df_hist["cidade"].unique())
+    mercados = sorted(df_hist["tipo_mercado"].unique())
 
-    if df.empty:
-        st.warning("Sem dados disponíveis para esta cidade.")
+    col1, col2 = st.columns(2)
+    with col1:
+        cidade_sel = st.selectbox("Cidade:", cidades)
+    with col2:
+        mercado_sel = st.selectbox("Tipo de Mercado:", mercados)
+
+    base = df_hist[
+        (df_hist["cidade"] == cidade_sel) &
+        (df_hist["tipo_mercado"] == mercado_sel)
+    ].copy()
+
+    if base.empty:
+        st.warning("Sem dados para esse filtro.")
         return
-
-    metrica = PREC_COL if PREC_COL in df.columns else df.select_dtypes(include=[np.number]).columns[0]
 
     fig = px.line(
-        df,
-        x="Data",
-        y=metrica,
-        title=f"📈 {tipo_label} — {cidade}",
+        base,
+        x="data",
+        y="preco_m2",
+        title=f"{cidade_sel} — {mercado_sel} (Histórico R$/m²)",
         markers=True,
-        line_shape="spline"
+        line_shape="spline",
+        labels={
+            "data": "Data",
+            "preco_m2": "Preço (R$/m²)"
+        }
     )
+
     st.plotly_chart(fig, use_container_width=True)
 
     with st.expander("📋 Ver dados brutos"):
-        st.dataframe(df)
+        st.dataframe(base.sort_values("data").reset_index(drop=True))
 
-# ------------------------------------------------------------
-# 🧠 Previsões Inteligentes
-# ------------------------------------------------------------
-def painel_modelo():
-    st.header("🤖 Previsões Inteligentes")
-    st.caption("Compare previsões feitas pelos modelos Prophet e SARIMA.")
 
-    if not os.path.exists(JOBLIB_PATH):
-        st.error("Arquivo de modelos não encontrado. Gere o arquivo `.joblib` primeiro.")
+# ============================================================
+# 🤖 Aba 2 - Previsões Inteligentes
+# ============================================================
+def painel_previsoes(pacote):
+    st.header("🤖 Previsões de Preço Futuro")
+    st.caption("Projeções SARIMA até 2028, baseadas em dados históricos consolidados.")
+
+    if pacote is None or "previsoes_futuras" not in pacote:
+        st.error("⚠ Nenhuma previsão disponível. Verifique se o arquivo modelos_sarima.joblib está correto.")
         return
 
-    try:
-        resultados = joblib.load(JOBLIB_PATH)
-    except Exception as e:
-        st.error(f"Erro ao carregar modelos: {e}")
-        return
+    previsoes = pacote["previsoes_futuras"].copy()
+    historico = pacote.get("historico_real", None)
+    info = pacote.get("info", {})
+    ultima_data_hist = pd.to_datetime(info.get("ultima_data_historica", None), errors="coerce")
 
-    # -------------------------
-    # 🔹 Tipo de mercado
-    nomes_mercado = {
-        "locacao": "Locação",
-        "vendas": "Vendas"
-    }
-    tipos_disponiveis = list(resultados.keys())
-    tipos_legiveis = {t: nomes_mercado.get(t, t.replace("_", " ").capitalize()) for t in tipos_disponiveis}
+    cidades = sorted(previsoes["cidade"].unique())
+    mercados = sorted(previsoes["tipo_mercado"].unique())
 
-    tipo_legivel = st.selectbox("Tipo de mercado:", list(tipos_legiveis.values()), index=0)
-    tipo_opcao = [k for k, v in tipos_legiveis.items() if v == tipo_legivel][0]
+    col1, col2 = st.columns(2)
+    with col1:
+        cidade_sel = st.selectbox("Cidade (previsão):", cidades)
+    with col2:
+        mercado_sel = st.selectbox("Tipo de Mercado (previsão):", mercados)
 
-    # -------------------------
-    # 🔹 Modelo
-    modelos_disponiveis = list(resultados[tipo_opcao].keys())
-    modelos_legiveis = {m: m.replace("_", " ").upper() for m in modelos_disponiveis}
+    fut = previsoes[
+        (previsoes["cidade"] == cidade_sel) &
+        (previsoes["tipo_mercado"] == mercado_sel)
+    ].copy()
 
-    modelo_legivel = st.selectbox("Modelo:", list(modelos_legiveis.values()), index=0)
-    modelo_opcao = [k for k, v in modelos_legiveis.items() if v == modelo_legivel][0]
+    fut = fut.sort_values("data")
 
-    # -------------------------
-    # 🔹 Cidade (capitais do Nordeste)
-    nomes_cidades = {
-        "Aracaju": "Aracaju (SE)",
-        "Fortaleza": "Fortaleza (CE)",
-        "Joao_Pessoa": "João Pessoa (PB)",
-        "Teresina": "Teresina (PI)",
-        "Maceio": "Maceió (AL)",
-        "Natal": "Natal (RN)",
-        "Recife": "Recife (PE)",
-        "Salvador": "Salvador (BA)",
-        "Sao_Luis": "São Luís (MA)"
-    }
-    cidades_disp = list(resultados[tipo_opcao][modelo_opcao].keys())
-    cidades_legiveis = {c: nomes_cidades.get(c, c.replace("_", " ").title()) for c in cidades_disp}
+    linhas = []
 
-    cidade_legivel = st.selectbox("Cidade:", list(cidades_legiveis.values()), index=0)
-    cidade = [k for k, v in cidades_legiveis.items() if v == cidade_legivel][0]
+    if isinstance(historico, pd.DataFrame):
+        hist = historico[
+            (historico["cidade"] == cidade_sel) &
+            (historico["tipo_mercado"] == mercado_sel)
+        ].copy()
 
-    # -------------------------
-    # 🔹 Dados e métricas
-    dados = resultados[tipo_opcao][modelo_opcao][cidade]
-    if modelo_opcao in dados:
-        dados = dados[modelo_opcao]
+        if not hist.empty:
+            hist = hist.rename(columns={"preco_real": "valor"})
+            hist["Serie"] = "Histórico Real"
+            linhas.append(hist[["data", "valor", "Serie"]])
 
-    if not dados or "metrics" not in dados:
-        st.warning("Sem dados disponíveis para esta cidade/modelo.")
-        return
+    fut_plot = fut.rename(columns={"preco_previsto": "valor"})
+    fut_plot["Serie"] = "Previsão SARIMA"
+    linhas.append(fut_plot[["data", "valor", "Serie"]])
 
-    met = dados["metrics"]
-    st.subheader(f"📏 Desempenho do Modelo {modelo_opcao.upper()} — {cidade_legivel}")
-    c1, c2, c3 = st.columns(3)
-    c1.metric("MAE", f"{met['MAE']:.2f}")
-    c2.metric("RMSE", f"{met['RMSE']:.2f}")
-    c3.metric("R²", f"{met['R2']:.2f}")
+    df_plot = pd.concat(linhas, ignore_index=True)
 
-    # -------------------------
-    # 🔹 Dados reais e previsão
-    tabela = "locacao" if tipo_opcao == "locacao" else "vendas"
-    df_real = carregar_cidade(tabela, cidade)
-    if df_real.empty:
-        st.warning("Sem dados reais para exibir.")
-        return
-
-    df_real = df_real.rename(columns={"Data": "ds"}).set_index("ds")
-    y_real = df_real[PREC_COL] if PREC_COL in df_real.columns else df_real.iloc[:, -1]
-    y_pred_test = dados.get("y_pred_test", pd.Series(dtype=float))
-    y_pred_future = dados.get("y_pred_future", pd.Series(dtype=float))
-
-    df_plot = pd.DataFrame({"Real": y_real})
-    if not y_pred_test.empty:
-        df_plot = df_plot.merge(y_pred_test.rename("Teste"), left_index=True, right_index=True, how="left")
-    if not y_pred_future.empty:
-        df_plot = pd.concat([df_plot, y_pred_future.rename("Futuro")], axis=0)
-
-    fig = px.line(df_plot, x=df_plot.index, y=df_plot.columns,
-                title=f"📉 {cidade_legivel} — {modelo_opcao.upper()}",
-                markers=True)
-    st.plotly_chart(fig, use_container_width=True)
-
-# ------------------------------------------------------------
-# 🔐 Página de Login Simples
-# ------------------------------------------------------------
-def login_page():
-    st.title("🔒 Login - Preditor Imobiliário")
-    st.write("Por favor, insira suas credenciais para acessar o sistema.")
-
-    st.markdown("""
-    <style>
-    footer {
-        visibility: hidden !important;
-    }
-    div[data-testid="stFormSubmitButton"] > button {
-        background-color: #28a745 !important; 
-        color: white !important;
-        border: none !important;
-        border-radius: 8px !important;
-        font-weight: 700 !important;
-        transition: 0.2s ease-in-out !important;
-    }
-    div[data-testid="stFormSubmitButton"] > button:hover {
-        background-color: #218838 !important; 
-    }
-    .stForm{
-        width: 65%;
-        margin: 0 auto;
-    }
-    .stForm > div:nth-child(1){
-        height: 225px;
-    }
-    .stForm > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > label:nth-child(1) > div:nth-child(1) > p:nth-child(1),
-    .stForm > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(1) > label:nth-child(1) > div:nth-child(1) > p:nth-child(1) {
-        font-size: 19px !important;
-    }  
-    .stMainBlockContainer > div:nth-child(1) > div:nth-child(1) > div:nth-child(1),
-    .stMainBlockContainer > div:nth-child(1) > div:nth-child(1) > div:nth-child(2){
-        margin: 0 auto;
-    }
-    
-    .custom-message {
-        width: 65%;
-        margin: 10px auto;
-        padding: 1rem;
-        border-radius: 8px;
-    }
-
-    .success-message {
-        background-color: #d4edda;
-        color: #155724;
-        border: 1px solid #c3e6cb;
-    }
-    
-    .error-message {
-        background-color: #f8d7da;
-        color: #721c24;
-        border: 1px solid #f5c6cb;
-    }
-
-    </style>
-    """, unsafe_allow_html=True)
-    
-    with st.form("login_form"):
-        usuario = st.text_input("Usuário:")
-        senha = st.text_input("Senha:", type="password")
-        enviar = st.form_submit_button("Entrar")
-
-    if enviar:
-        if usuario == "admin" and senha == "admin":
-            st.session_state["autenticado"] = True
-            st.markdown(
-                '<div class="custom-message success-message">✅ Login realizado com sucesso!</div>', 
-                unsafe_allow_html=True
-            )
-            time.sleep(2)
-            st.rerun()
-        else:
-            st.markdown(
-                '<div class="custom-message error-message">❌ Usuário ou senha incorretos.</div>', 
-                unsafe_allow_html=True
-            )
-# ------------------------------------------------------------
-# 🚀 Layout principal
-# ------------------------------------------------------------
-def main():
-    # Verificação de login
-    if "autenticado" not in st.session_state or not st.session_state["autenticado"]:
-        login_page()
-        return
-
-    # Interface principal (mantida original)
-    st.title("🏠 Preditor Imobiliário")
-    st.caption("Dashboard de Análise e Previsão de Preços de Imóveis")
-
-    menu = st.sidebar.radio(
-        "Navegar por:",
-        ["📥 Atualização de Dados", "📊 Visualização de Dados", "🤖 Previsões Inteligentes"],
-        index=1
+    fig = px.line(
+        df_plot,
+        x="data",
+        y="valor",
+        color="Serie",
+        markers=True,
+        labels={"data": "Data", "valor": "Preço (R$/m²)"},
+        title=f"{cidade_sel} — {mercado_sel} (Histórico + Projeção)"
     )
 
-    if "Atualização" in menu:
-        painel_captura()
-    elif "Visualização" in menu:
-        painel_dashboard()
-    else:
-        painel_modelo()
+    if pd.notnull(ultima_data_hist):
+        fig.add_shape(
+            type="line",
+            x0=ultima_data_hist,
+            x1=ultima_data_hist,
+            y0=0,
+            y1=1,
+            yref="paper",
+            line=dict(color="gray", dash="dot", width=2)
+        )
+        fig.add_annotation(
+            x=ultima_data_hist,
+            y=1,
+            yref="paper",
+            text="Início da projeção",
+            showarrow=False,
+            xanchor="left",
+            yanchor="top"
+        )
 
-# ------------------------------------------------------------
+    st.plotly_chart(fig, use_container_width=True)
+
+    st.markdown("#### Próximos 6 meses estimados")
+    preview = fut[["data", "preco_previsto"]].tail(6).rename(columns={
+        "data": "Data",
+        "preco_previsto": "Preço Previsto (R$/m²)"
+    })
+    st.dataframe(preview.reset_index(drop=True))
+
+
+# ============================================================
+# 🚀 Layout principal
+# ============================================================
+def main():
+    # controle de sessão
+    if "auth" not in st.session_state:
+        st.session_state["auth"] = False
+
+    # se não estiver autenticado, mostra login e para aqui
+    if not st.session_state["auth"]:
+        mostrar_login()
+        return
+
+    # ---- a partir daqui só vê quem logou ----
+    st.title("🏠 Preditor Imobiliário")
+    st.caption("Dashboard acadêmico de análise e previsão de preços de imóveis.")
+
+    # botão de logout na sidebar
+    st.sidebar.markdown("### 👤 Sessão")
+    if st.sidebar.button("Sair"):
+        st.session_state["auth"] = False
+        st.rerun()
+
+    aba = st.sidebar.radio(
+        "Navegar por:",
+        ["📊 Visualização de Dados", "🤖 Previsões Inteligentes"],
+        index=0
+    )
+
+    df_hist = carregar_dados_historicos()
+    pacote_prev = carregar_snapshot_previsoes()
+
+    if aba.startswith("📊"):
+        painel_dashboard(df_hist)
+    else:
+        painel_previsoes(pacote_prev)
+
+    st.markdown("---")
+    st.caption("Protótipo acadêmico. Dados confidenciais.")
+
+
+# ============================================================
+# 🏁 main
+# ============================================================
 if __name__ == "__main__":
     main()
