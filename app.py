@@ -1,5 +1,6 @@
 import os
 import joblib
+import time
 import pandas as pd
 import plotly.express as px
 import streamlit as st
@@ -29,45 +30,81 @@ def mostrar_login():
     if "auth" not in st.session_state:
         st.session_state["auth"] = False
 
-    st.markdown("## 🏠 Preditor Imobiliário")
-    st.markdown("### 🔐 Acesso restrito")
+    st.title("🏠 Preditor Imobiliário")
+    
+    st.markdown("""
+    <style>
+        footer { visibility: hidden !important; }
 
-    # layout centralizado
-    col_esq, col_centro, col_dir = st.columns([1, 2, 1])
-    with col_centro:
-        st.markdown(
-            """
-            <div style="
-                padding: 2rem;
-                border-radius: 0.8rem;
-                background-color: #111827;
-                border: 1px solid #374151;
-                box-shadow: 0 10px 30px rgba(0,0,0,0.45);
-            ">
-                <h3 style="margin-bottom: 0.5rem;">Login do painel</h3>
-                <p style="font-size: 0.9rem; color: #9CA3AF; margin-top: 0;">
-                    Acesse com suas credenciais administrativas.
-                </p>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        /* Título e formulário */
+        .stHeading, .stForm { margin: 0 auto; text-align: center; }
+        .stForm { width: 65%; }
+        
+        /* Título interno do login */
+            h2, h3, h4, p {
+                text-align: left !important;
+        }
 
-        # form logo abaixo do card de texto
-        with st.form("login_form"):
-            usuario = st.text_input("Usuário")
-            senha = st.text_input("Senha", type="password")
-            entrar = st.form_submit_button("Entrar")
+        /* Botão de envio */
+        div[data-testid="stFormSubmitButton"] > button {
+            background: #28a745 !important;
+            color: #fff !important;
+            border: none !important;
+            border-radius: 8px !important;
+            font-weight: 700 !important;
+            transition: 0.2s ease-in-out !important;
+        }
+        div[data-testid="stFormSubmitButton"] > button:hover {
+            background: #218838 !important;
+        }
 
-        if entrar:
-            if usuario == "admin" and senha == "admin":
-                st.session_state["auth"] = True
-                st.success("Login realizado com sucesso! ✨")
-                st.rerun()
-            else:
-                st.error("Usuário ou senha inválidos.")
+        /* Labels */
+        .stForm label p {
+            font-size: 19px !important;
+        }
 
+        /* Mensagens de status */
+        .custom-message {
+            width: 65%;
+            margin: 10px auto;
+            padding: 1rem;
+            border-radius: 8px;
+            text-align: left;
+        }
+        .success-message {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+        """, unsafe_allow_html=True)
+    
+    with st.form("login_form"):
+        st.markdown("### 🔐 Login do painel")
+        st.write("Acesse com suas credenciais administrativas.")
+        usuario = st.text_input("Usuário")
+        senha = st.text_input("Senha", type="password")
+        entrar = st.form_submit_button("Entrar")
 
+    if entrar:
+        if usuario == "admin" and senha == "admin":
+            st.session_state["auth"] = True
+            st.markdown(
+                '<div class="custom-message success-message">✅ Login realizado com sucesso!</div>', 
+                unsafe_allow_html=True
+            )
+            time.sleep(2)
+            st.rerun()
+        else:
+            st.markdown(
+                '<div class="custom-message error-message">❌ Usuário ou senha incorretos.</div>', 
+                unsafe_allow_html=True
+            )
 # ============================================================
 # 🔎 Funções auxiliares de detecção de coluna
 # ============================================================
@@ -232,8 +269,8 @@ def carregar_dados_historicos():
 def carregar_snapshot_previsoes():
     """
     Espera um joblib com:
-      pacote["previsoes_futuras"]: df [data, cidade, tipo_mercado, preco_previsto]
-      pacote["historico_real"]: df [data, cidade, tipo_mercado, preco_real] (opcional)
+    pacote["previsoes_futuras"]: df [data, cidade, tipo_mercado, preco_previsto]
+    pacote["historico_real"]: df [data, cidade, tipo_mercado, preco_real] (opcional)
       pacote["info"]: dict com "ultima_data_historica"
     """
     if not os.path.exists(JOBLIB_PATH):
