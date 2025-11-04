@@ -64,10 +64,8 @@ Thumbs.db
 # ==============================
 *.db
 *.sqlite3
-*.csv
 data/
 db/
-csv/
 
 # ==============================
 # 🚀 STREAMLIT TEMP FILES
