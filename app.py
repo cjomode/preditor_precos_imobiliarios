@@ -1,8 +1,13 @@
 import os
+import json
 import joblib
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+import pyotp
+import qrcode
+from PIL import Image
+from io import BytesIO
 
 # ============================================================
 # 🎨 Configuração da página
@@ -19,13 +24,12 @@ st.set_page_config(
 HERE = os.path.dirname(os.path.abspath(__file__))
 CSV_PATH = os.path.join(HERE, "csv_unico.csv")
 JOBLIB_PATH = os.path.join(HERE, "modelos_sarima.joblib")
-
+USERS_PATH = os.path.join(HERE, "users.json")
 
 # ============================================================
 # 🔐 Tela de Login
 # ============================================================
 def mostrar_login():
-    # garante que a chave exista
     if "auth" not in st.session_state:
         st.session_state["auth"] = False
 
@@ -43,6 +47,7 @@ def mostrar_login():
                 background-color: #111827;
                 border: 1px solid #374151;
                 box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+                margin-bottom: 2rem;
             ">
                 <h3 style="margin-bottom: 0.5rem;">Login do painel</h3>
                 <p style="font-size: 0.9rem; color: #9CA3AF; margin-top: 0;">
@@ -61,11 +66,51 @@ def mostrar_login():
 
         if entrar:
             if usuario == "admin" and senha == "admin":
-                st.session_state["auth"] = True
-                st.success("Login realizado com sucesso! ✨")
-                st.rerun()
+                st.session_state["basic_auth"] = True
+                st.success("Autenticação básica ok. Agora siga para MFA abaixo 👇")
             else:
                 st.error("Usuário ou senha inválidos.")
+
+    # === MFA abaixo do card de login ===
+    if st.session_state.get("basic_auth", False):
+        st.markdown("---")
+        st.markdown("### 🔐 Verificação MFA (2º Fator)")
+
+        # garante que o segredo exista
+        if "user_secret" not in st.session_state:
+            st.session_state.user_secret = pyotp.random_base32()
+
+        totp = pyotp.TOTP(st.session_state.user_secret)
+        uri = totp.provisioning_uri(
+            name="admin@example.com",
+            issuer_name="PreditorImobiliario"
+        )
+
+        qr = qrcode.make(uri)
+        buf = BytesIO()
+        qr.save(buf, format="PNG")
+        buf.seek(0)
+
+        # Centraliza QR e campo MFA
+        col_esq, col_centro, col_dir = st.columns([1, 2, 1])
+        with col_centro:
+            st.image(
+                Image.open(buf),
+                caption="📱 Escaneie no app (ex: 2FAS, Google Authenticator)",
+                width=180,
+            )
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            otp = st.text_input("Digite o código MFA:", type="password", max_chars=6)
+            verificar = st.button("Verificar MFA")
+
+            if verificar:
+                if totp.verify(otp):
+                    st.session_state["auth"] = True
+                    st.success("✅ Login MFA verificado com sucesso!")
+                    st.rerun()
+                else:
+                    st.error("❌ Código inválido. Tente novamente.")
 
 
 # ============================================================
