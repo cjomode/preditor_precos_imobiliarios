@@ -4,3 +4,4 @@ pandas
 joblib
 fpdf2
 gTTS
+openai
