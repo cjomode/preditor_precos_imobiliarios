@@ -1,15 +1,6 @@
 streamlit
 plotly
 pandas
-numpy
-scikit-learn
-xgboost
-prophet
-statsmodels
 joblib
-python-dateutil
-pytest
-jupyter
-selenium
-webdriver-manager
 fpdf2
+gTTS

@@ -1,10 +1,11 @@
 import os
-import time  # <- necessário para o login da Ju
 import joblib
 import pandas as pd
 import plotly.express as px
 import streamlit as st
 from fpdf import FPDF
+from gtts import gTTS
+import tempfile
 
 # -------------------- Config da página --------------------
 st.set_page_config(
@@ -18,94 +19,60 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 CSV_PATH = os.path.join(HERE, "csv_unico.csv")
 JOBLIB_PATH = os.path.join(HERE, "modelos_sarima.joblib")
 
+# -------------------- Acessibilidade: TTS --------------------
+def ler_texto_em_voz_alta(texto: str):
+    """Gera áudio (pt-BR) do texto e exibe um player no Streamlit."""
+    if not texto or not str(texto).strip():
+        st.warning("Nenhum texto disponível para leitura.")
+        return
+    try:
+        tts = gTTS(text=str(texto), lang="pt-br")
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
+            tts.save(tmp.name)
+            st.audio(tmp.name, format="audio/mp3")
+    except Exception as e:
+        st.error(f"Erro ao gerar áudio: {e}")
 
-# ============================================================
-# 🔐 Login (versão da Ju, reaproveitada no nosso app)
-# ============================================================
+# -------------------- Login --------------------
 def mostrar_login():
-    # garante que a chave exista
     if "auth" not in st.session_state:
         st.session_state["auth"] = False
 
-    st.title("🏠 Preditor Imobiliário")
+    st.markdown("## 🏠 Preditor Imobiliário")
+    st.markdown("### 🔐 Acesso restrito")
 
-    st.markdown(
-        """
-    <style>
-        footer { visibility: hidden !important; }
+    col_esq, col_centro, col_dir = st.columns([1, 2, 1])
+    with col_centro:
+        st.markdown(
+            """
+            <div style="
+                padding: 2rem;
+                border-radius: 0.8rem;
+                background-color: #111827;
+                border: 1px solid #374151;
+                box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+            ">
+                <h3 style="margin-bottom: 0.5rem;">Login do painel</h3>
+                <p style="font-size: 0.9rem; color: #9CA3AF; margin-top: 0;">
+                    Acesse com suas credenciais administrativas.
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-        /* Título e formulário */
-        .stHeading, .stForm { margin: 0 auto; text-align: center; }
-        .stForm { width: 65%; }
-        
-        /* Título interno do login */
-        h2, h3, h4, p {
-            text-align: left !important;
-        }
+        with st.form("login_form"):
+            usuario = st.text_input("Usuário")
+            senha = st.text_input("Senha", type="password")
+            entrar = st.form_submit_button("Entrar")
 
-        /* Botão de envio */
-        div[data-testid="stFormSubmitButton"] > button {
-            background: #28a745 !important;
-            color: #fff !important;
-            border: none !important;
-            border-radius: 8px !important;
-            font-weight: 700 !important;
-            transition: 0.2s ease-in-out !important;
-        }
-        div[data-testid="stFormSubmitButton"] > button:hover {
-            background: #218838 !important;
-        }
-
-        /* Labels */
-        .stForm label p {
-            font-size: 19px !important;
-        }
-
-        /* Mensagens de status */
-        .custom-message {
-            width: 65%;
-            margin: 10px auto;
-            padding: 1rem;
-            border-radius: 8px;
-            text-align: left;
-        }
-        .success-message {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-        .error-message {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-    </style>
-        """,
-        unsafe_allow_html=True
-    )
-
-    with st.form("login_form"):
-        st.markdown("### 🔐 Login do painel")
-        st.write("Acesse com suas credenciais administrativas.")
-        usuario = st.text_input("Usuário")
-        senha = st.text_input("Senha", type="password")
-        entrar = st.form_submit_button("Entrar")
-
-    if entrar:
-        if usuario == "admin" and senha == "admin":
-            st.session_state["auth"] = True
-            st.markdown(
-                '<div class="custom-message success-message">✅ Login realizado com sucesso!</div>',
-                unsafe_allow_html=True
-            )
-            time.sleep(2)
-            st.rerun()
-        else:
-            st.markdown(
-                '<div class="custom-message error-message">❌ Usuário ou senha incorretos.</div>',
-                unsafe_allow_html=True
-            )
-
+        if entrar:
+            if usuario == "admin" and senha == "admin":
+                st.session_state["auth"] = True
+                st.success("Login realizado com sucesso! ✨")
+                st.rerun()
+            else:
+                st.error("Usuário ou senha inválidos.")
 
 # -------------------- Helpers de colunas --------------------
 def detectar_coluna(colunas, candidatos):
@@ -120,7 +87,6 @@ def detectar_coluna(colunas, candidatos):
                 return real
     return None
 
-
 def detectar_coluna_data(cols):
     candidatos = [
         "data", "dt", "date", "data_mes", "mes", "mes_referencia",
@@ -129,11 +95,9 @@ def detectar_coluna_data(cols):
     ]
     return detectar_coluna(cols, candidatos)
 
-
 def detectar_coluna_cidade(cols):
     candidatos = ["cidade", "municipio", "município", "City", "CIDADE", "localidade"]
     return detectar_coluna(cols, candidatos)
-
 
 def detectar_coluna_tipo(cols):
     candidatos = [
@@ -141,7 +105,6 @@ def detectar_coluna_tipo(cols):
         "tipo", "Tipo", "TipoMercado", "TipoMercado_Nome"
     ]
     return detectar_coluna(cols, candidatos)
-
 
 def detectar_coluna_preco(cols):
     candidatos_fixos = [
@@ -162,7 +125,6 @@ def detectar_coluna_preco(cols):
                 "indice" in cl or "índice" in cl):
             return c
     return None
-
 
 # -------------------- Dados históricos --------------------
 @st.cache_data(show_spinner=False)
@@ -232,7 +194,6 @@ def carregar_dados_historicos():
 
     return df[["data", "cidade", "tipo_mercado", "preco_m2"]]
 
-
 # -------------------- Previsões SARIMA --------------------
 @st.cache_resource(show_spinner=False)
 def carregar_snapshot_previsoes():
@@ -257,6 +218,47 @@ def carregar_snapshot_previsoes():
 
     return pacote
 
+# -------------------- Acessibilidade: textos das seções --------------------
+def texto_dashboard_acessivel(base, cidade_sel, mercado_sel):
+    if base.empty:
+        return "Sem dados para o filtro escolhido."
+    inicial = base["preco_m2"].iloc[0]
+    atual = base["preco_m2"].iloc[-1]
+    media = base["preco_m2"].mean()
+    minimo = base["preco_m2"].min()
+    maximo = base["preco_m2"].max()
+    variacao = (atual - inicial) / inicial * 100 if inicial != 0 else 0
+    return (
+        f"Visão histórica do mercado imobiliário de {cidade_sel}, no segmento {mercado_sel}. "
+        f"Preço médio do período: {media:.2f} reais por metro quadrado. "
+        f"Valor mínimo observado: {minimo:.2f}. Valor máximo observado: {maximo:.2f}. "
+        f"Valor atual: {atual:.2f}. Variação acumulada desde o início: {variacao:.1f} por cento. "
+        "O gráfico de linha mostra a evolução mensal do preço."
+    )
+
+def texto_previsoes_acessivel(fut, cidade_sel, mercado_sel, ultima_data_hist):
+    if fut.empty:
+        return "Sem dados de previsão para o filtro escolhido."
+    inicio = fut["data"].min()
+    fim = fut["data"].max()
+    ult = fut.sort_values("data").iloc[-1]["preco_previsto"]
+    return (
+        f"Previsões de preço para {cidade_sel}, mercado {mercado_sel}. "
+        f"Janela de projeção de {inicio:%b %Y} até {fim:%b %Y}. "
+        f"Preço previsto no último mês da projeção: {ult:.2f} reais por metro quadrado. "
+        f"A linha vertical indica o início da projeção após {ultima_data_hist:%b %Y}."
+        if pd.notnull(ultima_data_hist) else
+        f"Previsões de preço para {cidade_sel}, mercado {mercado_sel}. "
+        f"Janela de projeção de {inicio:%b %Y} até {fim:%b %Y}. "
+        f"Preço previsto no último mês: {ult:.2f} reais por metro quadrado."
+    )
+
+def texto_relatorio_acessivel(texto_resumo, resumo_kpis):
+    partes = [texto_resumo.strip()]
+    for k, v in resumo_kpis.items():
+        partes.append(f"{k}: {v}")
+    partes.append("Você pode baixar o relatório completo em PDF usando o botão disponível.")
+    return " ".join(partes)
 
 # -------------------- Aba 1: histórico --------------------
 def painel_dashboard(df_hist):
@@ -285,6 +287,10 @@ def painel_dashboard(df_hist):
         st.warning("Sem dados para esse filtro.")
         return
 
+    # Botão de acessibilidade (ler a seção)
+    if st.button("🎧 Ouvir explicação desta seção"):
+        ler_texto_em_voz_alta(texto_dashboard_acessivel(base, cidade_sel, mercado_sel))
+
     fig = px.line(
         base,
         x="data",
@@ -294,12 +300,10 @@ def painel_dashboard(df_hist):
         line_shape="spline",
         labels={"data": "Data", "preco_m2": "Preço (R$/m²)"}
     )
-
     st.plotly_chart(fig, use_container_width=True)
 
     with st.expander("📋 Ver dados brutos"):
         st.dataframe(base.sort_values("data").reset_index(drop=True))
-
 
 # -------------------- Aba 2: previsões --------------------
 def painel_previsoes(pacote):
@@ -349,6 +353,10 @@ def painel_previsoes(pacote):
 
     df_plot = pd.concat(linhas, ignore_index=True)
 
+    # Botão de acessibilidade (ler a seção)
+    if st.button("🎧 Ouvir explicação das previsões"):
+        ler_texto_em_voz_alta(texto_previsoes_acessivel(fut, cidade_sel, mercado_sel, ultima_data_hist))
+
     fig = px.line(
         df_plot,
         x="data",
@@ -387,7 +395,6 @@ def painel_previsoes(pacote):
         "preco_previsto": "Preço Previsto (R$/m²)"
     })
     st.dataframe(preview.reset_index(drop=True))
-
 
 # -------------------- PDF --------------------
 def gerar_pdf_relatorio(cidade, mercado, df_base, resumo_kpis, texto_resumo):
@@ -437,13 +444,10 @@ def gerar_pdf_relatorio(cidade, mercado, df_base, resumo_kpis, texto_resumo):
     else:
         return bytes(result)
 
-
 # -------------------- Aba 3: dashboards + relatório --------------------
 def painel_relatorios(df_hist):
     st.header("📑 Análise Exploratória por Cidade + Relatório em PDF")
-    st.caption(
-        "Dashboards exploratórios"
-    )
+    st.caption("Dashboards exploratórios")
 
     if df_hist.empty:
         st.warning("⚠ Ainda não há dados históricos suficientes para montar o relatório.")
@@ -568,6 +572,15 @@ def painel_relatorios(df_hist):
         "apoiar decisões de reajuste de contratos, negociação de valores e planejamento de investimentos futuros."
     )
 
+    # Botão de acessibilidade (ler a seção completa)
+    if st.button("🎧 Ouvir resumo desta seção"):
+        resumo_kpis_tmp = {
+            "Preço atual (R$/m²)": f"R$ {preco_atual_str}",
+            "Média no período": f"R$ {preco_medio_str}",
+            "Variação acumulada": f"{variacao_pct_str}%",
+        }
+        ler_texto_em_voz_alta(texto_relatorio_acessivel(texto_resumo, resumo_kpis_tmp))
+
     st.markdown("### 📝 Resumo em texto corrido")
     st.markdown(texto_resumo)
 
@@ -588,7 +601,7 @@ def painel_relatorios(df_hist):
         f"No gráfico de linha acima, cada ponto representa o preço médio do metro quadrado em um mês. "
         f"Quando a linha sobe, significa que os preços ficaram mais altos; quando desce, que eles recuaram. "
         f"Nesta cidade, no período analisado, saímos de um valor próximo de R$ {formata_valor(inicial)} "
-        f"e chegamos a cerca de R$ {preco_atual_str}, o que reforça {sentido}."
+        f"e chegamos a cerca de R$ {preco_medio_str if variacao_pct==0 else preco_atual_str}, o que reforça {sentido}."
     )
     st.caption(texto_linha)
 
@@ -723,6 +736,9 @@ def painel_relatorios(df_hist):
         mime="application/pdf"
     )
 
+    # Botão de acessibilidade (ler o resumo + KPIs logo acima do botão PDF)
+    if st.button("🎧 Ouvir resumo e indicadores"):
+        ler_texto_em_voz_alta(texto_relatorio_acessivel(texto_resumo, resumo_kpis))
 
 # -------------------- Main --------------------
 def main():
@@ -763,7 +779,6 @@ def main():
 
     st.markdown("---")
     st.caption("Protótipo acadêmico. Dados confidenciais.")
-
 
 if __name__ == "__main__":
     main()
