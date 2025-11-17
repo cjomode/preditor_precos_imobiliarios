@@ -13,3 +13,7 @@ selenium
 webdriver-manager
 pyotp
 qrcode[pil]
+joblib
+fpdf2
+gTTS
+openai
