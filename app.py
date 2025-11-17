@@ -45,6 +45,8 @@ def ler_texto_em_voz_alta(texto: str):
 def mostrar_login():
     if "auth" not in st.session_state:
         st.session_state["auth"] = False
+    if "basic_auth" not in st.session_state:
+        st.session_state["basic_auth"] = False
 
     st.title("🏠 Preditor Imobiliário")
 
@@ -103,27 +105,71 @@ def mostrar_login():
         unsafe_allow_html=True
     )
 
-    with st.form("login_form"):
+    # Form de login básico (só se não basic_auth)
+    if not st.session_state["basic_auth"]:
         st.markdown("### 🔐 Login do painel")
         st.write("Acesse com suas credenciais administrativas.")
-        usuario = st.text_input("Usuário")
-        senha = st.text_input("Senha", type="password")
-        entrar = st.form_submit_button("Entrar")
+        with st.form("login_form"):
+            usuario = st.text_input("Usuário")
+            senha = st.text_input("Senha", type="password")
+            entrar = st.form_submit_button("Entrar")
 
-    if entrar:
-        if usuario == "admin" and senha == "admin":
-            st.session_state["auth"] = True
-            st.markdown(
-                '<div class="custom-message success-message">✅ Login realizado com sucesso!</div>',
-                unsafe_allow_html=True
+        if entrar:
+            if usuario == "admin" and senha == "admin":
+                st.session_state["basic_auth"] = True
+                st.markdown(
+                    '<div class="custom-message success-message">✅ Login básico realizado! Agora configure o MFA.</div>',
+                    unsafe_allow_html=True
+                )
+                st.rerun()
+            else:
+                st.markdown(
+                    '<div class="custom-message error-message">❌ Usuário ou senha incorretos.</div>',
+                    unsafe_allow_html=True
+                )
+
+    # MFA (só se basic_auth e não auth)
+    if st.session_state["basic_auth"] and not st.session_state["auth"]:
+        st.markdown("---")
+        st.markdown("### 🔐 Verificação MFA (2º Fator)")
+
+        # Garante que o segredo exista
+        if "user_secret" not in st.session_state:
+            st.session_state.user_secret = pyotp.random_base32()
+
+        totp = pyotp.TOTP(st.session_state.user_secret)
+        uri = totp.provisioning_uri(
+            name="admin@example.com",
+            issuer_name="PreditorImobiliario"
+        )
+
+        qr = qrcode.make(uri)
+        buf = BytesIO()
+        qr.save(buf, format="PNG")
+        buf.seek(0)
+
+        # Centraliza QR
+        col_esq, col_centro, col_dir = st.columns([1, 2, 1])
+        with col_centro:
+            st.image(
+                Image.open(buf),
+                caption="📱 Escaneie no app (ex: 2FAS, Google Authenticator)",
+                width=180,
             )
-            time.sleep(2)
-            st.rerun()
-        else:
-            st.markdown(
-                '<div class="custom-message error-message">❌ Usuário ou senha incorretos.</div>',
-                unsafe_allow_html=True
-            )
+            st.markdown("<br>", unsafe_allow_html=True)
+
+        # Form para MFA
+        with st.form("mfa_form"):
+            otp = st.text_input("Digite o código MFA:", type="password", max_chars=6)
+            verificar = st.form_submit_button("Verificar MFA")
+
+            if verificar:
+                if totp.verify(otp):
+                    st.session_state["auth"] = True
+                    st.success("✅ Login MFA verificado com sucesso!")
+                    st.rerun()
+                else:
+                    st.error("❌ Código inválido. Tente novamente.")
 
 
 # -------------------- Helpers de colunas --------------------
@@ -805,6 +851,8 @@ def painel_relatorios(df_hist):
 def main():
     if "auth" not in st.session_state:
         st.session_state["auth"] = False
+    if "basic_auth" not in st.session_state:
+        st.session_state["basic_auth"] = False
 
     if not st.session_state["auth"]:
         mostrar_login()
@@ -816,6 +864,7 @@ def main():
     st.sidebar.markdown("### 👤 Sessão")
     if st.sidebar.button("Sair"):
         st.session_state["auth"] = False
+        st.session_state["basic_auth"] = False
         st.rerun()
 
     aba = st.sidebar.radio(

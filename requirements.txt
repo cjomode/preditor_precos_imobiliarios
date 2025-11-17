@@ -17,3 +17,5 @@ joblib
 fpdf2
 gTTS
 openai
+pyotp
+qrcode[pil]
