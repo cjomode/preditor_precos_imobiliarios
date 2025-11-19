@@ -71,3 +71,8 @@ db/
 # 🚀 STREAMLIT TEMP FILES
 # ==============================
 .streamlit/
+
+# ==============================
+# 👤 USERS LOGADOS NO MFA
+# ==============================
+users.json

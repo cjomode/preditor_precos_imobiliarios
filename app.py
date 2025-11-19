@@ -1,5 +1,6 @@
 import os
 import time
+import json
 import joblib
 import pandas as pd
 import plotly.express as px
@@ -7,8 +8,10 @@ import streamlit as st
 from fpdf import FPDF
 from gtts import gTTS
 import tempfile
-
-from openai import OpenAI  # OpenAI oficial
+import pyotp
+import qrcode
+from PIL import Image
+from io import BytesIO
 
 # -------------------- Config da página --------------------
 st.set_page_config(
@@ -21,11 +24,6 @@ st.set_page_config(
 HERE = os.path.dirname(os.path.abspath(__file__))
 CSV_PATH = os.path.join(HERE, "csv_unico.csv")
 JOBLIB_PATH = os.path.join(HERE, "modelos_sarima.joblib")
-
-# -------------------- Config LLM OpenAI --------------------
-# Usa OPENAI_API_KEY do ambiente (padrão da SDK)
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
-client = OpenAI()  # pega a chave do ambiente automaticamente
 
 
 # -------------------- Acessibilidade: TTS --------------------
@@ -43,53 +41,12 @@ def ler_texto_em_voz_alta(texto: str):
         st.error(f"Erro ao gerar áudio: {e}")
 
 
-# -------------------- LLM: OpenAI --------------------
-def chamar_llm(pergunta: str, contexto: str = "") -> str:
-    """
-    Usa um modelo da OpenAI (ex: gpt-4.1-mini) para responder
-    perguntas sobre mercado imobiliário.
-    """
-
-    if not os.getenv("OPENAI_API_KEY"):
-        return (
-            "A chave OPENAI_API_KEY não está configurada no ambiente.\n\n"
-            "Defina a variável de ambiente OPENAI_API_KEY com seu token da OpenAI "
-            "antes de usar o assistente IA."
-        )
-
-    system_msg = (
-        "Você é um especialista em mercado imobiliário brasileiro e comunicação clara. "
-        "Responda SEMPRE em português do Brasil, em linguagem simples e direta, "
-        "como se estivesse explicando para um cliente leigo. "
-        "Se fizer recomendações, deixe claro que é apenas apoio educacional, "
-        "não recomendação financeira formal."
-    )
-
-    # Prompt estilo 'instruct' (igual ao que usávamos na Hugging Face)
-    prompt = system_msg + "\n\n"
-    if contexto:
-        prompt += f"Contexto sobre os dados e dashboards disponíveis:\n{contexto}\n\n"
-    prompt += f"Pergunta do usuário:\n{pergunta}\n\nResposta detalhada em português do Brasil:\n"
-
-    try:
-        response = client.responses.create(
-            model=OPENAI_MODEL,
-            input=prompt,
-            max_output_tokens=512,
-            temperature=0.4,
-        )
-        # SDK nova: texto direto
-        return response.output_text.strip()
-    except Exception as e:
-        return f"Erro ao chamar o modelo de linguagem (OpenAI): {e}"
-
-
-# -------------------- Login --------------------
+# -------------------- Login (versão Juliana) --------------------
 def mostrar_login():
-
-    # garante que a chave exista
     if "auth" not in st.session_state:
         st.session_state["auth"] = False
+    if "basic_auth" not in st.session_state:
+        st.session_state["basic_auth"] = False
 
     st.title("🏠 Preditor Imobiliário")
 
@@ -148,28 +105,71 @@ def mostrar_login():
         unsafe_allow_html=True
     )
 
-    with st.form("login_form"):
-
+    # Form de login básico (só se não basic_auth)
+    if not st.session_state["basic_auth"]:
         st.markdown("### 🔐 Login do painel")
         st.write("Acesse com suas credenciais administrativas.")
-        usuario = st.text_input("Usuário")
-        senha = st.text_input("Senha", type="password")
-        entrar = st.form_submit_button("Entrar")
+        with st.form("login_form"):
+            usuario = st.text_input("Usuário")
+            senha = st.text_input("Senha", type="password")
+            entrar = st.form_submit_button("Entrar")
 
-    if entrar:
-        if usuario == "admin" and senha == "admin":
-            st.session_state["auth"] = True
-            st.markdown(
-                '<div class="custom-message success-message">✅ Login realizado com sucesso!</div>',
-                unsafe_allow_html=True
+        if entrar:
+            if usuario == "admin" and senha == "admin":
+                st.session_state["basic_auth"] = True
+                st.markdown(
+                    '<div class="custom-message success-message">✅ Login básico realizado! Agora configure o MFA.</div>',
+                    unsafe_allow_html=True
+                )
+                st.rerun()
+            else:
+                st.markdown(
+                    '<div class="custom-message error-message">❌ Usuário ou senha incorretos.</div>',
+                    unsafe_allow_html=True
+                )
+
+    # MFA (só se basic_auth e não auth)
+    if st.session_state["basic_auth"] and not st.session_state["auth"]:
+        st.markdown("---")
+        st.markdown("### 🔐 Verificação MFA (2º Fator)")
+
+        # Garante que o segredo exista
+        if "user_secret" not in st.session_state:
+            st.session_state.user_secret = pyotp.random_base32()
+
+        totp = pyotp.TOTP(st.session_state.user_secret)
+        uri = totp.provisioning_uri(
+            name="admin@example.com",
+            issuer_name="PreditorImobiliario"
+        )
+
+        qr = qrcode.make(uri)
+        buf = BytesIO()
+        qr.save(buf, format="PNG")
+        buf.seek(0)
+
+        # Centraliza QR
+        col_esq, col_centro, col_dir = st.columns([1, 2, 1])
+        with col_centro:
+            st.image(
+                Image.open(buf),
+                caption="📱 Escaneie no app (ex: 2FAS, Google Authenticator)",
+                width=180,
             )
-            time.sleep(2)
-            st.rerun()
-        else:
-            st.markdown(
-                '<div class="custom-message error-message">❌ Usuário ou senha incorretos.</div>',
-                unsafe_allow_html=True
-            )
+            st.markdown("<br>", unsafe_allow_html=True)
+
+        # Form para MFA
+        with st.form("mfa_form"):
+            otp = st.text_input("Digite o código MFA:", type="password", max_chars=6)
+            verificar = st.form_submit_button("Verificar MFA")
+
+            if verificar:
+                if totp.verify(otp):
+                    st.session_state["auth"] = True
+                    st.success("✅ Login MFA verificado com sucesso!")
+                    st.rerun()
+                else:
+                    st.error("❌ Código inválido. Tente novamente.")
 
 
 # -------------------- Helpers de colunas --------------------
@@ -847,75 +847,12 @@ def painel_relatorios(df_hist):
         ler_texto_em_voz_alta(texto_relatorio_acessivel(texto_resumo, resumo_kpis))
 
 
-# -------------------- Aba 4: Assistente IA (LLM) --------------------
-def painel_llm(df_hist):
-    st.header("🧠 Assistente IA Imobiliário (LLM)")
-    st.caption(
-        "Esta aba demonstra o uso de um modelo de deep learning de linguagem natural (LLM) "
-        "para perguntas e respostas sobre o mercado imobiliário."
-    )
-
-    if "pergunta_llm" not in st.session_state:
-        st.session_state["pergunta_llm"] = ""
-
-    st.markdown("#### Perguntas sugeridas")
-    col_a, col_b, col_c = st.columns(3)
-    with col_a:
-        if st.button("Tendência geral de preços"):
-            st.session_state["pergunta_llm"] = (
-                "Explique de forma simples como estão se comportando os preços dos imóveis no Brasil nos últimos anos."
-            )
-            st.rerun()
-    with col_b:
-        if st.button("Como usar o dashboard"):
-            st.session_state["pergunta_llm"] = (
-                "Explique para um cliente leigo como ele pode usar este dashboard para acompanhar os preços de imóveis."
-            )
-            st.rerun()
-    with col_c:
-        if st.button("Recomendação para reajuste de aluguel"):
-            st.session_state["pergunta_llm"] = (
-                "Como eu poderia usar a análise histórica de preços por m² para orientar o reajuste de um contrato de aluguel?"
-            )
-            st.rerun()
-
-    st.markdown("#### Faça sua pergunta para a IA")
-    pergunta = st.text_area(
-        "Digite sua pergunta sobre o mercado imobiliário ou o dashboard:",
-        value=st.session_state["pergunta_llm"],
-        key="pergunta_llm_textarea",
-        height=120
-    )
-
-    if st.button("Perguntar para a IA"):
-        if not pergunta.strip():
-            st.warning("Digite uma pergunta antes de enviar para a IA.")
-            return
-
-        contexto = ""
-        if not df_hist.empty:
-            cidades = ", ".join(sorted(df_hist["cidade"].unique())[:5])
-            tipos = ", ".join(sorted(df_hist["tipo_mercado"].unique())[:5])
-            contexto = (
-                f"Os dados históricos disponíveis no sistema incluem preços por m² de imóveis em diversas cidades "
-                f"({cidades}...) e tipos de mercado ({tipos}...). "
-                "Os dashboards mostram séries históricas, variação percentual, distribuição de preços e previsões SARIMA."
-            )
-
-        with st.spinner("Consultando o modelo de linguagem (LLM)..."):
-            resposta = chamar_llm(pergunta, contexto=contexto)
-
-        st.markdown("### Resposta da IA")
-        st.markdown(resposta)
-
-        if st.button("🎧 Ouvir resposta da IA"):
-            ler_texto_em_voz_alta(resposta)
-
-
 # -------------------- Main --------------------
 def main():
     if "auth" not in st.session_state:
         st.session_state["auth"] = False
+    if "basic_auth" not in st.session_state:
+        st.session_state["basic_auth"] = False
 
     if not st.session_state["auth"]:
         mostrar_login()
@@ -927,6 +864,7 @@ def main():
     st.sidebar.markdown("### 👤 Sessão")
     if st.sidebar.button("Sair"):
         st.session_state["auth"] = False
+        st.session_state["basic_auth"] = False
         st.rerun()
 
     aba = st.sidebar.radio(
@@ -935,7 +873,6 @@ def main():
             "📊 Visualização de Dados",
             "🤖 Previsões Inteligentes",
             "📑 Relatórios e PDF",
-            "🧠 Assistente IA (LLM)",
         ],
         index=0
     )
@@ -949,13 +886,11 @@ def main():
         painel_previsoes(pacote_prev)
     elif aba.startswith("📑"):
         painel_relatorios(df_hist)
-    else:
-        painel_llm(df_hist)
 
     st.markdown("---")
     st.caption(
-        "Protótipo acadêmico. A aplicação utiliza modelos de deep learning "
-        "para síntese de voz (gTTS) e linguagem natural (LLMs externas via OpenAI)."
+        "Protótipo acadêmico. A aplicação utiliza recursos de acessibilidade, como síntese de voz (gTTS), "
+        "além de modelos estatísticos (SARIMA) para previsão de preços."
     )
 
 
