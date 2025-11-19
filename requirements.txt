@@ -1,9 +1,7 @@
 streamlit
 plotly
 pandas
-numpy
 scikit-learn
-prophet
 statsmodels
 joblib
 python-dateutil
@@ -16,6 +14,5 @@ qrcode[pil]
 joblib
 fpdf2
 gTTS
-openai
 pyotp
 qrcode[pil]
