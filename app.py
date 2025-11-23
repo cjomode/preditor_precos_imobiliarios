@@ -242,6 +242,7 @@ def carregar_dados_historicos():
             sep=None,
             engine="python",
             encoding="utf-8",
+            dtype=str
         )
     except UnicodeDecodeError:
         df = pd.read_csv(
@@ -249,6 +250,7 @@ def carregar_dados_historicos():
             sep=None,
             engine="python",
             encoding="latin-1",
+            dtype=str
         )
 
     df.columns = [c.strip().replace("\ufeff", "") for c in df.columns]
