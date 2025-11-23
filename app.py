@@ -15,7 +15,7 @@ from io import BytesIO
 
 # -------------------- Config da página --------------------
 st.set_page_config(
-    page_title="Preditor Imobiliário",
+    page_title="PredImóveis",
     layout="wide",
     page_icon="🏠"
 )
@@ -48,7 +48,10 @@ def mostrar_login():
     if "basic_auth" not in st.session_state:
         st.session_state["basic_auth"] = False
 
-    st.title("🏠 Preditor Imobiliário")
+    with st.container():
+        col1, col2, col3 = st.columns([1, 0.4, 1]) 
+    with col2:
+        st.image("images/logo.png", use_container_width=False, width=200)
 
     st.markdown(
         """
@@ -107,9 +110,9 @@ def mostrar_login():
 
     # Form de login básico (só se não basic_auth)
     if not st.session_state["basic_auth"]:
-        st.markdown("### 🔐 Login do painel")
-        st.write("Acesse com suas credenciais administrativas.")
         with st.form("login_form"):
+            st.markdown("### 🔐 Login do painel")
+            st.write("Acesse com suas credenciais administrativas.")
             usuario = st.text_input("Usuário")
             senha = st.text_input("Senha", type="password")
             entrar = st.form_submit_button("Entrar")
@@ -121,6 +124,7 @@ def mostrar_login():
                     '<div class="custom-message success-message">✅ Login básico realizado! Agora configure o MFA.</div>',
                     unsafe_allow_html=True
                 )
+                time.sleep(2)
                 st.rerun()
             else:
                 st.markdown(
@@ -130,8 +134,14 @@ def mostrar_login():
 
     # MFA (só se basic_auth e não auth)
     if st.session_state["basic_auth"] and not st.session_state["auth"]:
-        st.markdown("---")
-        st.markdown("### 🔐 Verificação MFA (2º Fator)")
+        st.markdown(
+            """
+            <div style="display:flex; justify-content:center; align-items:center;">
+                <h3 style="margin:0;">🔐 Verificação MFA (2º Fator)</h3>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
         # Garante que o segredo exista
         if "user_secret" not in st.session_state:
@@ -140,7 +150,7 @@ def mostrar_login():
         totp = pyotp.TOTP(st.session_state.user_secret)
         uri = totp.provisioning_uri(
             name="admin@example.com",
-            issuer_name="PreditorImobiliario"
+            issuer_name="PredImóveis"
         )
 
         qr = qrcode.make(uri)
@@ -167,8 +177,10 @@ def mostrar_login():
                 if totp.verify(otp):
                     st.session_state["auth"] = True
                     st.success("✅ Login MFA verificado com sucesso!")
+                    time.sleep(2)
                     st.rerun()
                 else:
+                    time.sleep(2)
                     st.error("❌ Código inválido. Tente novamente.")
 
 
@@ -611,6 +623,8 @@ def painel_relatorios(df_hist):
     preco_atual_str = formata_valor(atual)
     variacao_pct_str = f"{variacao_pct:,.1f}".replace(",", "X").replace(".", ",").replace("X", ".")
     desvio_str = f"{desvio:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    valor_inicial_limpo = formata_valor(inicial)
+    valor_atual_limpo = preco_medio_str if variacao_pct == 0 else preco_atual_str
 
     col_kpi1, col_kpi2, col_kpi3 = st.columns(3)
     col_kpi1.metric("Preço atual (R$/m²)", preco_atual_str)
@@ -691,7 +705,7 @@ def painel_relatorios(df_hist):
         ler_texto_em_voz_alta(texto_relatorio_acessivel(texto_resumo, resumo_kpis_tmp))
 
     st.markdown("### 📝 Resumo em texto corrido")
-    st.markdown(texto_resumo)
+    st.text(texto_resumo)
 
     # gráficos
     st.markdown("### 📈 Tendência no período selecionado")
@@ -709,11 +723,10 @@ def painel_relatorios(df_hist):
     texto_linha = (
         f"No gráfico de linha acima, cada ponto representa o preço médio do metro quadrado em um mês. "
         f"Quando a linha sobe, significa que os preços ficaram mais altos; quando desce, que eles recuaram. "
-        f"Nesta cidade, no período analisado, saímos de um valor próximo de R$ {formata_valor(inicial)} "
-        f"e chegamos a cerca de R$ {preco_medio_str if variacao_pct == 0 else preco_atual_str}, "
+        f"Nesta cidade, no período analisado, saímos de um valor próximo de R$ {valor_inicial_limpo} e chegamos a cerca de R$ {valor_atual_limpo}, "
         f"o que reforça {sentido}."
     )
-    st.caption(texto_linha)
+    st.caption(f'<p style="font-size: 0.875rem">{texto_linha}</p>', unsafe_allow_html=True)
 
     base["ano"] = base["data"].dt.year
     por_ano = base.groupby("ano")["preco_m2"].mean().reset_index()
@@ -860,7 +873,7 @@ def main():
         mostrar_login()
         return
 
-    st.title("🏠 Preditor Imobiliário")
+    st.title("🏠 PredImóveis")
     st.caption("Dashboard acadêmico de análise e previsão de preços de imóveis.")
 
     st.sidebar.markdown("### 👤 Sessão")
