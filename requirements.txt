@@ -15,4 +15,3 @@ joblib
 fpdf2
 gTTS
 pyotp
-qrcode[pil]
