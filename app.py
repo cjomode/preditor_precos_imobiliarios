@@ -270,27 +270,17 @@ def carregar_dados_historicos():
     col_tipo = detectar_coluna_tipo(df.columns)
     col_preco = detectar_coluna_preco(df.columns)
 
-    faltando = []
-    if col_data is None:
-        faltando.append("data (ex: Data / Periodo / Mes / Referencia)")
-    if col_cidade is None:
-        faltando.append("cidade (ex: Cidade / Municipio)")
-    if col_tipo is None:
-        faltando.append("tipo_mercado (ex: Tipo_Mercado / Mercado)")
-    if col_preco is None:
-        faltando.append("preco_m2 (preço médio m² / índice de preço)")
-
-    if faltando:
-        st.error("⚠ Não consegui mapear todas as colunas essenciais do CSV.")
-        st.write("O que ficou faltando identificar:", faltando)
-        st.write("Colunas que existem no CSV:", list(df.columns))
-        return pd.DataFrame()
-
     df = df.rename(columns={
         col_data: "data",
         col_cidade: "cidade",
         col_tipo: "tipo_mercado",
         col_preco: "preco_m2"
+    })
+
+    # --- Correção de nomes incompletos das cidades ---
+    df["cidade"] = df["cidade"].replace({
+        "João": "João Pessoa",
+        "São": "São Luís"
     })
 
     df["data"] = pd.to_datetime(df["data"], errors="coerce", dayfirst=False)
