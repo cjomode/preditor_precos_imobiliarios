@@ -51,7 +51,7 @@ def mostrar_login():
     with st.container():
         col1, col2, col3 = st.columns([1, 0.4, 1]) 
     with col2:
-        st.image("images/logo.png", use_container_width=False, width=200)
+        st.image("images/predimoveislogo.png", use_container_width=False, width=200)
 
     st.markdown(
         """
