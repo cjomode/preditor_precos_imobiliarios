@@ -7,18 +7,18 @@ Funcionalidade: Login com MFA
     Para visualizar os dados
 
     Cenário: Login com sucesso e MFA válido
-    Dado que estou na página de login
-    E preencho corretamente os campos de usuário e senha
-    Quando tento realizar o login
-    E insiro o código MFA correto
-    Então devo receber acesso ao sistema e visualizar o dashboard
+        Dado que estou na página de login
+        E preencho corretamente os campos de usuário e senha
+        Quando tento realizar o login
+        E insiro o código MFA correto
+        Então devo receber acesso ao sistema e visualizar o dashboard
 
     Cenário: Login básico correto, MFA inválido
-    Dado que estou na página de login
-    E preencho corretamente os campos de usuário e senha
-    Quando tento realizar o login
-    E insiro um código MFA incorreto
-    Então devo ver a mensagem "Login básico realizado! Agora configure o MFA."
+        Dado que estou na página de login
+        E preencho corretamente os campos de usuário e senha
+        Quando tento realizar o login
+        E insiro um código MFA incorreto
+        Então devo ver a mensagem "Código inválido. Tente novamente."
 
 
     Cenário: MFA correto

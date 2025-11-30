@@ -16,7 +16,7 @@ def mock_verificar_mfa(codigo):
     if codigo == "000000":
         return {"sucesso": True, "mensagem": "MFA válido"}
     else:
-        return {"sucesso": False, "mensagem": "MFA inválido"}
+        return {"sucesso": False, "mensagem": "Código inválido. Tente novamente."}
 
 #STEPS
 @given("que estou na página de login")
@@ -66,9 +66,9 @@ def step_impl(context):
     assert context.mfa_response["sucesso"] is True
 
 
-@then('devo ver a mensagem "Login básico realizado! Agora configure o MFA."')
+@then('devo ver a mensagem "Código inválido. Tente novamente."')
 def step_impl(context):
-    assert context.login_response["mensagem"] == "Login básico realizado! Agora configure o MFA."
+    assert context.mfa_response["mensagem"] == "Código inválido. Tente novamente."
 
 
 # MFA após login básico 
