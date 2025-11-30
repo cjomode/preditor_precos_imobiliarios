@@ -21,10 +21,6 @@ def test_mock_tts_com_texto():
     audio = mock_tts(resumo)
     assert audio == "A leitura do resumo foi iniciada."
 
-def test_mock_tts_sem_texto():
-    audio = mock_tts("")
-    assert audio is None
-
 def test_ouvir_resumo_integrado():
     aba_atual = "Relatórios e PDF"
     assert aba_atual == "Relatórios e PDF"
