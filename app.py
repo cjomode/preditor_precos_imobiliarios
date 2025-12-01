@@ -51,7 +51,7 @@ def mostrar_login():
     with st.container():
         col1, col2, col3 = st.columns([1, 0.4, 1]) 
     with col2:
-        st.image("images/logo.png", use_container_width=False, width=200)
+        st.image("images/predimoveislogo.png", use_container_width=False, width=200)
 
     st.markdown(
         """
@@ -254,6 +254,7 @@ def carregar_dados_historicos():
             sep=None,
             engine="python",
             encoding="utf-8",
+            dtype=str
         )
     except UnicodeDecodeError:
         df = pd.read_csv(
@@ -261,6 +262,7 @@ def carregar_dados_historicos():
             sep=None,
             engine="python",
             encoding="latin-1",
+            dtype=str
         )
 
     df.columns = [c.strip().replace("\ufeff", "") for c in df.columns]

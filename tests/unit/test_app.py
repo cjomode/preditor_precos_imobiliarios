@@ -1,63 +1,83 @@
-import os
+import sys, os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+
 import pytest
 import pandas as pd
-from app import listar_cidades, carregar_cidade
-import plotly.express as px
+from io import BytesIO
+from app import (
+    detectar_coluna,
+    detectar_coluna_data,
+    detectar_coluna_cidade,
+    detectar_coluna_tipo,
+    detectar_coluna_preco,
+    texto_dashboard_acessivel,
+    texto_previsoes_acessivel,
+    texto_relatorio_acessivel,
+    gerar_pdf_relatorio
+)
+
+def test_detectar_coluna():
+    cols = ["DataVenda", "Cidade", "Preco_m2"]
+    assert detectar_coluna(cols, ["data", "dt"]) == "DataVenda"
+    assert detectar_coluna(cols, ["cidade", "municipio"]) == "Cidade"
+    assert detectar_coluna(cols, ["preco", "valor_m2"]) == "Preco_m2"
+
+def test_detectar_coluna_data():
+    cols = ["DataVenda", "Cidade"]
+    assert detectar_coluna_data(cols) == "DataVenda"
+
+def test_detectar_coluna_cidade():
+    cols = ["DataVenda", "Cidade"]
+    assert detectar_coluna_cidade(cols) == "Cidade"
+
+def test_detectar_coluna_tipo():
+    cols = ["Tipo_Mercado", "Cidade"]
+    assert detectar_coluna_tipo(cols) == "Tipo_Mercado"
+
+def test_detectar_coluna_preco():
+    cols = ["Preco_m2", "Cidade"]
+    assert detectar_coluna_preco(cols) == "Preco_m2"
 
 
-def test_listar_cidades():
-    def test_listar_cidades():
-    # Testa tabela existente
-        cidades = listar_cidades("locacao")
-        assert isinstance(cidades, list), "Deve retornar uma lista"
-        if cidades:
-            assert all(isinstance(c, str) for c in cidades), "Todos os elementos devem ser strings"
-
-    # Para tabela inexistente
-    cidades = listar_cidades("tabela_inexistente")
-    assert cidades == []
-
-def test_carregar_cidade():
-    cidades = listar_cidades("locacao")
-    if cidades:
-        df = carregar_cidade("locacao", cidades[0])
-        assert isinstance(df, pd.DataFrame)
-        assert "Data" in df.columns
-
-def test_grafico_gerado():
-    # Dados simulando o gráfico que você enviou
+def test_texto_dashboard_acessivel():
     df = pd.DataFrame({
-        "Data": pd.date_range(start="2022-01-01", periods=40, freq='M'),
-        "Preço médio (R$/m²)Total": [
-            17.1, 17.2, 17.0, 16.4, 16.2, 16.5, 17.0, 17.3, 17.5, 17.3,
-            17.2, 17.4, 17.1, 16.9, 17.0, 17.8, 18.2, 18.9, 19.5, 20.2,
-            21.0, 21.5, 21.6, 21.6, 22.4, 23.5, 23.7, 24.0, 23.8, 23.5,
-            23.6, 23.8, 24.0, 24.2, 25.5, 25.7, 26.0, 25.8, 25.5, 26.3
-        ]
+        "data": pd.date_range("2025-01-01", periods=3, freq='M'),
+        "cidade": ["Recife"]*3,
+        "tipo_mercado": ["Locação"]*3,
+        "preco_m2": [1000, 1100, 1200]
     })
+    txt = texto_dashboard_acessivel(df, "Recife", "Locação")
+    assert "Recife" in txt
+    assert "Locação" in txt
+    assert "Preço médio do período" in txt
 
-    # Cria gráfico
-    fig = px.line(
-        df,
-        x="Data",
-        y="Preço médio (R$/m²)Total",
-        title="Mercado de Locação — Aracaju",
-        markers=True,
-        line_shape="spline"
-    )
+def test_texto_previsoes_acessivel():
+    df = pd.DataFrame({
+        "data": pd.date_range("2025-01-01", periods=3, freq='M'),
+        "preco_previsto": [1300, 1350, 1400]
+    })
+    ultima_data_hist = pd.Timestamp("2024-12-31")
+    txt = texto_previsoes_acessivel(df, "Recife", "Venda", ultima_data_hist)
+    assert "Recife" in txt
+    assert "Venda" in txt
+    assert "Preço previsto no último mês" in txt
 
-    # ✅ Testa se o gráfico possui dados
-    assert fig.data, "Gráfico deve conter dados"
+def test_texto_relatorio_acessivel():
+    resumo = "Resumo do mercado"
+    kpis = {"Média": 1000, "Máximo": 1200}
+    txt = texto_relatorio_acessivel(resumo, kpis)
+    assert "Resumo do mercado" in txt
+    assert "Média" in txt
+    assert "Máximo" in txt
 
-    # ✅ Testa título
-    assert fig.layout.title.text == "Mercado de Locação — Aracaju"
+def test_gerar_pdf_relatorio():
+    df = pd.DataFrame({
+        "data": pd.date_range("2025-01-01", periods=3, freq='M'),
+        "preco_m2": [1000, 1100, 1200]
+    })
+    resumo_kpis = {"Média": "1000", "Máximo": "1200"}
+    texto_resumo = "Resumo do relatório"
+    pdf_bytes = gerar_pdf_relatorio("Recife", "Locação", df, resumo_kpis, texto_resumo)
+    assert isinstance(pdf_bytes, bytes)
+    assert pdf_bytes[:4] == b"%PDF"
 
-    # ✅ Testa se eixo X contém datas
-    x_values = [str(pt)[:10] for pt in df["Data"]]
-    fig_x_values = [str(pt)[:10] for pt in fig.data[0].x]
-    assert fig_x_values == x_values
-
-    # ✅ Testa se eixo Y contém valores
-    y_values = list(df["Preço médio (R$/m²)Total"])
-    fig_y_values = list(fig.data[0].y)
-    assert fig_y_values == y_values
