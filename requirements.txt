@@ -1,10 +1,7 @@
 streamlit
 plotly
 pandas
-numpy
 scikit-learn
-xgboost
-prophet
 statsmodels
 joblib
 python-dateutil
@@ -12,3 +9,10 @@ pytest
 jupyter
 selenium
 webdriver-manager
+pyotp
+qrcode[pil]
+joblib
+fpdf2
+gTTS
+pyotp
+behave
